@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Local database: holds YOUR real financial data. Never commit it.
+*.db
+*.sqlite3
+
+# Secrets
+.env
+
+# Uploaded receipts (future)
+uploads/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Serenity · Dashboard</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">Serenity</span>
+    <nav>
+      <a href="/" class="active">Dashboard</a>
+      <a href="/accounts">Accounts</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Dashboard</h1>
+    <p class="muted">Totals are calculated from your stored accounts every time this page loads.</p>
+
+    <section class="cards">
+      <div class="card">
+        <div class="card-label">Total balance</div>
+        <div class="card-value" id="total-balance">–</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Accounts</div>
+        <div class="card-value" id="account-count">–</div>
+      </div>
+    </section>
+
+    <h2>By classification</h2>
+    <section class="cards" id="classification-cards"></section>
+
+    <p id="error" class="error" hidden></p>
+  </main>
+
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

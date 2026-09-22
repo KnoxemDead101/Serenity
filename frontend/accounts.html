@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Serenity · Accounts</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">Serenity</span>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/accounts" class="active">Accounts</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Accounts</h1>
+
+    <section class="panel">
+      <h2>Add an account</h2>
+      <form id="account-form">
+        <label>Name
+          <input name="name" required maxlength="100" placeholder="e.g. Everyday Checking">
+        </label>
+        <label>Account type
+          <select name="account_type" required></select>
+        </label>
+        <label>Classification
+          <select name="classification" required></select>
+        </label>
+        <label>Opening balance ($)
+          <input name="opening_balance" type="number" step="0.01" value="0.00" required>
+          <small class="muted">Use a negative number for money owed (e.g. a credit card).</small>
+        </label>
+        <label>Institution <span class="muted">(optional)</span>
+          <input name="institution" maxlength="100">
+        </label>
+        <label>Notes <span class="muted">(optional)</span>
+          <textarea name="notes" rows="2" maxlength="1000"></textarea>
+        </label>
+        <button type="submit">Add account</button>
+        <p id="form-message" class="message" hidden></p>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Your accounts</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Classification</th>
+              <th>Institution</th>
+              <th class="num">Balance</th>
+            </tr>
+          </thead>
+          <tbody id="accounts-body">
+            <tr><td colspan="5" class="muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/accounts.js"></script>
+</body>
+</html>
