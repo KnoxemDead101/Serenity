@@ -13,12 +13,15 @@
       <a href="/">Dashboard</a>
       <a href="/accounts">Accounts</a>
       <a href="/finances" class="active">Finances</a>
+      <a href="/setup">Setup</a>
+      <a href="/sign-out" class="sign-out">Sign out</a>
     </nav>
   </header>
 
   <main>
     <h1>Finances</h1>
-    <p class="muted">Track the commitments and long-term holdings that shape your financial picture.</p>
+    <p class="muted">Track the commitments and long-term holdings that shape your financial picture.
+      Deactivated items stay in your history but no longer count toward totals.</p>
 
     <section class="panel">
       <h2>Bills</h2>
@@ -38,13 +41,16 @@
         <label>Category <span class="muted">(optional)</span>
           <input name="category" maxlength="100" placeholder="Housing">
         </label>
-        <button type="submit">Add bill</button>
+        <label>Notes <span class="muted">(optional)</span>
+          <textarea name="notes" maxlength="1000" rows="2"></textarea>
+        </label>
+        <div class="form-buttons"><button type="submit">Add bill</button><button type="button" class="secondary" data-cancel hidden>Cancel edit</button></div>
         <p id="bill-message" class="message" hidden></p>
       </form>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Bill</th><th>Due</th><th>Frequency</th><th>Category</th><th class="num">Amount</th></tr></thead>
-          <tbody id="bills-body"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+          <thead><tr><th>Bill</th><th>Due</th><th>Frequency</th><th>Category</th><th class="num">Amount</th><th>Actions</th></tr></thead>
+          <tbody id="bills-body"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -70,13 +76,16 @@
         <label>Next due date <span class="muted">(optional)</span>
           <input name="due_date" type="date">
         </label>
-        <button type="submit">Add debt</button>
+        <label>Notes <span class="muted">(optional)</span>
+          <textarea name="notes" maxlength="1000" rows="2"></textarea>
+        </label>
+        <div class="form-buttons"><button type="submit">Add debt</button><button type="button" class="secondary" data-cancel hidden>Cancel edit</button></div>
         <p id="debt-message" class="message" hidden></p>
       </form>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Debt</th><th>Type</th><th>Due</th><th class="num">Rate</th><th class="num">Minimum</th><th class="num">Balance</th></tr></thead>
-          <tbody id="debts-body"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+          <thead><tr><th>Debt</th><th>Type</th><th>Due</th><th class="num">Rate</th><th class="num">Minimum</th><th class="num">Balance</th><th>Actions</th></tr></thead>
+          <tbody id="debts-body"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -99,13 +108,16 @@
         <label>Current value ($)
           <input name="current_value" type="number" min="0" step="0.01" required>
         </label>
-        <button type="submit">Add investment</button>
+        <label>Notes <span class="muted">(optional)</span>
+          <textarea name="notes" maxlength="1000" rows="2"></textarea>
+        </label>
+        <div class="form-buttons"><button type="submit">Add investment</button><button type="button" class="secondary" data-cancel hidden>Cancel edit</button></div>
         <p id="investment-message" class="message" hidden></p>
       </form>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Investment</th><th>Ticker</th><th class="num">Quantity</th><th class="num">Cost basis</th><th class="num">Current value</th></tr></thead>
-          <tbody id="investments-body"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+          <thead><tr><th>Investment</th><th>Ticker</th><th class="num">Quantity</th><th class="num">Cost basis</th><th class="num">Current value</th><th>Actions</th></tr></thead>
+          <tbody id="investments-body"><tr><td colspan="6" class="muted">Loading…</td></tr>
         </table>
       </div>
     </section>

@@ -211,6 +211,78 @@ def test_failed_delete_leaves_transaction_available_for_retry(page, client):
     assert account_balance(client, account["id"]) == "0.00"
 
 
+def test_edit_and_deactivate_account(page, client):
+    account = add_account(client, "Checking", "20.00")
+    page.goto("http://serenity.test/accounts")
+    row = page.locator("#accounts-body tr").filter(has_text="Checking")
+    expect(row).to_be_visible()
+    row.get_by_role("button", name="Edit").click()
+    account_form = page.locator("#account-form")
+    account_form.locator("[name=name]").fill("Everyday Checking")
+    account_form.get_by_role("button", name="Save account").click()
+    expect(page.locator("#form-message")).to_have_text('Saved "Everyday Checking".')
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.locator("#accounts-body tr").filter(has_text="Everyday Checking").get_by_role(
+        "button", name="Deactivate"
+    ).click()
+    expect(page.locator("#accounts-body tr.inactive")).to_contain_text("Inactive")
+    expect(page.locator("#transaction-form select[name=account_id] option")).to_have_count(1)
+    expect(page.locator("#transaction-form button[type=submit]")).to_be_disabled()
+    assert client.get(f"/serenity-api/accounts/{account['id']}").json()["active"] is False
+
+
+def test_inactive_account_history_remains_readable_and_editable(page, client):
+    account = add_account(client, "Archived Checking")
+    transaction = add_transaction(client, account["id"], description="Before deactivation")
+    client.put(
+        f"/serenity-api/accounts/{account['id']}/transactions/{transaction['id']}",
+        json={
+            "date": "2026-09-21",
+            "transaction_type": "Expense",
+            "amount": "6.00",
+            "description": "After deactivation",
+        },
+    )
+    assert client.post(f"/serenity-api/accounts/{account['id']}/deactivate").status_code == 200
+
+    page.goto("http://serenity.test/accounts")
+    account_select = page.locator("#transaction-form select[name=account_id]")
+    account_select.select_option(str(account["id"]))
+    expect(page.locator("#transactions-body")).to_contain_text("After deactivation")
+    expect(page.locator("#corrections-body")).to_contain_text("Before deactivation")
+    expect(page.locator("#transaction-form button[type=submit]")).to_be_disabled()
+
+    page.locator("#transactions-body").get_by_role("button", name="Edit").click()
+    expect(page.locator("#transaction-form button[type=submit]")).to_be_enabled()
+    expect(page.locator("#transaction-form [name=description]")).to_have_value("After deactivation")
+
+
+def test_accounts_and_transactions_table_columns_align(page, client):
+    account = add_account(client, "Column Check")
+    add_transaction(client, account["id"], description="Column transaction")
+    page.goto("http://serenity.test/accounts")
+    account_select = page.locator("#transaction-form select[name=account_id]")
+    account_select.select_option(str(account["id"]))
+    expect(page.locator("#accounts-body tr").first.locator("td")).to_have_count(6)
+    expect(page.locator("#transactions-body tr").first.locator("td")).to_have_count(9)
+    accounts_headers = page.locator("#accounts-body").locator("xpath=ancestor::table[1]").locator("th")
+    transaction_headers = page.locator("#transactions-body").locator("xpath=ancestor::table[1]").locator("th")
+    expect(accounts_headers).to_have_count(6)
+    expect(transaction_headers).to_have_count(9)
+    expect(transaction_headers.nth(5)).to_have_text("For")
+
+
+def test_accounts_page_fits_a_phone_screen(page, client):
+    add_account(client, "Checking", "20.00")
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.goto("http://serenity.test/accounts")
+    expect(page.locator("#accounts-body tr").first).to_contain_text("Checking")
+    overflow = page.evaluate(
+        "() => document.documentElement.scrollWidth - document.documentElement.clientWidth"
+    )
+    assert overflow <= 1
+
+
 def test_new_transaction_can_use_business_classification(page, client):
     account = add_account(client, "Checking", "100.00")
     page.goto("http://serenity.test/accounts")
@@ -227,3 +299,12 @@ def test_new_transaction_can_use_business_classification(page, client):
     expect(row).to_contain_text("Business")
     expect(row).to_contain_text("Newegg")
     assert account_balance(client, account["id"]) == "10.01"
+
+
+def test_setup_page_manages_business_and_dependent_surfaces(page, client):
+    page.goto("http://serenity.test/setup")
+    expect(page.get_by_role("heading", name="Setup")).to_be_visible()
+    expect(page.get_by_role("heading", name="Businesses")).to_be_visible()
+    expect(page.get_by_role("heading", name="Dependents")).to_be_visible()
+    expect(page.locator("#business-form [name=name]")).to_be_visible()
+    expect(page.locator("#dependent-form [name=display_name]")).to_be_visible()

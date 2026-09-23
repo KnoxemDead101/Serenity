@@ -3,3 +3,5 @@
 - [Python dependency setup](python-publish-dependencies.md) — Replit manages requirements; avoid explicit pip in publish builds and post-merge setup.
 - [Browser validation workflow](browser-validation-workflow.md) — keep Chromium checks in named validation, not the normal app Run button.
 - [Legacy SQLite and Alembic](legacy-sqlite-alembic.md) — pre-migration SQLite files can block Alembic; inspect and preserve data before initializing a new database.
+- [SQLite UTC timestamps](sqlite-utc-timestamps.md) — SQLite drops timezone metadata on ORM reads; treat its naive persisted timestamps as UTC at API boundaries.
+- [Clerk vanilla JS UI](clerk-vanilla-js-ui.md) — plain HTML must load the matching Clerk UI bundle before mounting prebuilt sign-in components.

@@ -5,7 +5,9 @@ from sqlalchemy import engine_from_config, pool
 
 import models.account  # noqa: F401
 import models.bill  # noqa: F401
+import models.business  # noqa: F401
 import models.debt  # noqa: F401
+import models.dependent  # noqa: F401
 import models.investment  # noqa: F401
 import models.transaction  # noqa: F401
 import models.transaction_correction  # noqa: F401

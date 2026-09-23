@@ -17,6 +17,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, field_validator
 
+from schemas.timestamps import TimestampReadModel
 from utils.choices import ACCOUNT_CLASSIFICATIONS, ACCOUNT_TYPES
 from utils.validators import optional_text, require_choice, require_text, validate_money
 
@@ -63,7 +64,7 @@ class AccountCreate(BaseModel):
         return optional_text(value, max_length=1000)
 
 
-class AccountRead(BaseModel):
+class AccountRead(TimestampReadModel):
     """What the API sends back for one account."""
 
     id: int
@@ -77,6 +78,10 @@ class AccountRead(BaseModel):
     active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class AccountUpdate(AccountCreate):
+    """Full replacement payload for editing an account."""
 
 
 class AccountTotals(BaseModel):

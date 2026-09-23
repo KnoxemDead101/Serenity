@@ -12,6 +12,7 @@ import os
 
 if os.getenv("DATABASE_URL", "").startswith("postgresql"):
     os.environ["DATABASE_URL"] = "sqlite://"
+os.environ.setdefault("SESSION_SECRET", "test-session-secret")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -21,12 +22,16 @@ from sqlalchemy.pool import StaticPool
 
 import models.account  # noqa: F401  (registers the accounts table)
 import models.bill  # noqa: F401
+import models.business  # noqa: F401
 import models.debt  # noqa: F401
+import models.dependent  # noqa: F401
 import models.investment  # noqa: F401
 import models.transaction  # noqa: F401
 import models.transaction_correction  # noqa: F401
 from main import app
 from storage.database import Base, get_db
+
+app.state.auth_bypass = True
 
 
 @pytest.fixture

@@ -12,7 +12,7 @@ async function apiGet(url) {
 }
 
 // Send a POST request with a JSON body and return the parsed JSON.
-async function apiPost(url, body) {
+async function apiPost(url, body = {}) {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -77,4 +77,29 @@ function makeCell(text, className) {
     cell.className = className;
   }
   return cell;
+}
+
+function makeRowButton(label, action, id, className) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+  button.dataset.action = action;
+  button.dataset.id = String(id);
+  if (className) button.className = className;
+  return button;
+}
+
+function makeActionsCell(...buttons) {
+  const cell = document.createElement("td");
+  const group = document.createElement("div");
+  group.className = "row-actions";
+  group.append(...buttons);
+  cell.appendChild(group);
+  return cell;
+}
+
+function showMessage(target, text, isError) {
+  target.textContent = text;
+  target.className = isError ? "message error" : "message success";
+  target.hidden = false;
 }

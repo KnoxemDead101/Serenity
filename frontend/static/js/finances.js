@@ -13,70 +13,42 @@ function formatDate(dateString) {
   );
 }
 
-function appendEmptyRow(body, columns, text = "No records yet.") {
-  const row = document.createElement("tr");
-  const cell = makeCell(text, "muted");
-  cell.colSpan = columns;
-  row.appendChild(cell);
-  body.replaceChildren(row);
-}
+const SECTIONS = [
+  { path: "bills", noun: "Bill", form: "bill-form", body: "bills-body", message: "bill-message",
+    columns: (r) => [makeCell(r.name), makeCell(formatDate(r.due_date)), makeCell(r.frequency), makeCell(r.category || "—"), makeCell(formatMoney(r.amount), "num")],
+     read: (f) => ({name:f.elements.name.value, amount:f.elements.amount.value, due_date:f.elements.due_date.value, frequency:f.elements.frequency.value, category:f.elements.category.value, notes:f.elements.notes.value}),
+     fill: (f,r) => { f.elements.name.value=r.name; f.elements.amount.value=r.amount; f.elements.due_date.value=r.due_date || ""; f.elements.frequency.value=r.frequency; f.elements.category.value=r.category || ""; f.elements.notes.value=r.notes || ""; }},
+  { path: "debts", noun: "Debt", form: "debt-form", body: "debts-body", message: "debt-message",
+    columns: (r) => [makeCell(r.name), makeCell(r.debt_type), makeCell(formatDate(r.due_date)), makeCell(`${r.interest_rate}%`, "num"), makeCell(formatMoney(r.minimum_payment), "num"), makeCell(formatMoney(r.balance), "num")],
+     read: (f) => ({name:f.elements.name.value, debt_type:f.elements.debt_type.value, balance:f.elements.balance.value, interest_rate:f.elements.interest_rate.value, minimum_payment:f.elements.minimum_payment.value, due_date:f.elements.due_date.value || null, notes:f.elements.notes.value}),
+     fill: (f,r) => { f.elements.name.value=r.name; f.elements.debt_type.value=r.debt_type; f.elements.balance.value=r.balance; f.elements.interest_rate.value=r.interest_rate; f.elements.minimum_payment.value=r.minimum_payment; f.elements.due_date.value=r.due_date || ""; f.elements.notes.value=r.notes || ""; }},
+  { path: "investments", noun: "Investment", form: "investment-form", body: "investments-body", message: "investment-message",
+    columns: (r) => [makeCell(r.name), makeCell(r.ticker || "—"), makeCell(r.quantity, "num"), makeCell(formatMoney(r.cost_basis), "num"), makeCell(formatMoney(r.current_value), "num")],
+     read: (f) => ({name:f.elements.name.value, ticker:f.elements.ticker.value, quantity:f.elements.quantity.value || "0", cost_basis:f.elements.cost_basis.value, current_value:f.elements.current_value.value, notes:f.elements.notes.value}),
+     fill: (f,r) => { f.elements.name.value=r.name; f.elements.ticker.value=r.ticker || ""; f.elements.quantity.value=r.quantity; f.elements.cost_basis.value=r.cost_basis; f.elements.current_value.value=r.current_value; f.elements.notes.value=r.notes || ""; }},
+];
 
-async function loadBills() {
-  const bills = await apiGet(`${financeApi}/bills`);
-  const body = document.getElementById("bills-body");
-  body.replaceChildren();
-  if (bills.length === 0) {
-    appendEmptyRow(body, 5);
-    return;
+function setUpSection(section) {
+  const form = document.getElementById(section.form), body = document.getElementById(section.body);
+  const message = document.getElementById(section.message), submit = form.querySelector('button[type="submit"]');
+  const cancel = form.querySelector("[data-cancel]"), addLabel = submit.textContent;
+  let records = [], editingId = null;
+  function reset() { editingId = null; form.reset(); submit.textContent = addLabel; cancel.hidden = true; }
+  async function load() {
+    records = await apiGet(`${financeApi}/${section.path}`); body.replaceChildren();
+    if (!records.length) { const row=document.createElement("tr"), cell=makeCell("No records yet.", "muted"); cell.colSpan=form.closest("section").querySelectorAll("th").length; row.appendChild(cell); body.appendChild(row); return; }
+    for (const record of records) {
+      const row=document.createElement("tr"); if (!record.active) row.className="inactive";
+      const cells=section.columns(record);
+      if (!record.active) { const badge=document.createElement("span"); badge.className="badge"; badge.textContent="Inactive"; cells[0].append(" ",badge); }
+      row.append(...cells, makeActionsCell(makeRowButton("Edit","edit",record.id), record.active ? makeRowButton("Deactivate","deactivate",record.id,"secondary") : makeRowButton("Reactivate","reactivate",record.id,"secondary")));
+      body.appendChild(row);
+    }
   }
-  for (const bill of bills) {
-    const row = document.createElement("tr");
-    row.appendChild(makeCell(bill.name));
-    row.appendChild(makeCell(formatDate(bill.due_date)));
-    row.appendChild(makeCell(bill.frequency));
-    row.appendChild(makeCell(bill.category || "—"));
-    row.appendChild(makeCell(formatMoney(bill.amount), "num"));
-    body.appendChild(row);
-  }
-}
-
-async function loadDebts() {
-  const debts = await apiGet(`${financeApi}/debts`);
-  const body = document.getElementById("debts-body");
-  body.replaceChildren();
-  if (debts.length === 0) {
-    appendEmptyRow(body, 6);
-    return;
-  }
-  for (const debt of debts) {
-    const row = document.createElement("tr");
-    row.appendChild(makeCell(debt.name));
-    row.appendChild(makeCell(debt.debt_type));
-    row.appendChild(makeCell(formatDate(debt.due_date)));
-    row.appendChild(makeCell(`${debt.interest_rate}%`, "num"));
-    row.appendChild(makeCell(formatMoney(debt.minimum_payment), "num"));
-    row.appendChild(makeCell(formatMoney(debt.balance), "num"));
-    body.appendChild(row);
-  }
-}
-
-async function loadInvestments() {
-  const investments = await apiGet(`${financeApi}/investments`);
-  const body = document.getElementById("investments-body");
-  body.replaceChildren();
-  if (investments.length === 0) {
-    appendEmptyRow(body, 5);
-    return;
-  }
-  for (const investment of investments) {
-    const row = document.createElement("tr");
-    row.appendChild(makeCell(investment.name));
-    row.appendChild(makeCell(investment.ticker || "—"));
-    row.appendChild(makeCell(investment.quantity, "num"));
-    row.appendChild(makeCell(formatMoney(investment.cost_basis), "num"));
-    row.appendChild(makeCell(formatMoney(investment.current_value), "num"));
-    body.appendChild(row);
-  }
+  form.addEventListener("submit", async (event) => { event.preventDefault(); try { if (editingId === null) { await apiPost(`${financeApi}/${section.path}`, section.read(form)); showMessage(message, `${section.noun} added.`, false); } else { await apiPut(`${financeApi}/${section.path}/${editingId}`, section.read(form)); showMessage(message, `${section.noun} saved.`, false); } reset(); await load(); } catch (error) { showMessage(message,error.message,true); }});
+  cancel.addEventListener("click", reset);
+  body.addEventListener("click", async (event) => { const button=event.target.closest("button[data-action]"); if(!button)return; const record=records.find((r)=>r.id===Number(button.dataset.id)); if(!record)return; if(button.dataset.action==="edit"){editingId=record.id; section.fill(form,record); submit.textContent=`Save ${section.noun.toLowerCase()}`; cancel.hidden=false; form.elements.name.focus(); return;} if(button.dataset.action==="deactivate" && !window.confirm(`Deactivate "${record.name}"? It stays in your history but stops counting toward totals.`))return; try { await apiPost(`${financeApi}/${section.path}/${record.id}/${button.dataset.action}`); showMessage(message,`${section.noun} ${button.dataset.action==="deactivate"?"deactivated":"reactivated"}.`,false); await load(); } catch(error){showMessage(message,error.message,true);} });
+  return {load};
 }
 
 async function loadFinanceOptions() {
@@ -97,69 +69,7 @@ async function loadFinanceOptions() {
   }
 }
 
-document.getElementById("bill-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const message = document.getElementById("bill-message");
-  try {
-    await apiPost(`${financeApi}/bills`, {
-      name: form.elements.name.value,
-      amount: form.elements.amount.value,
-      due_date: form.elements.due_date.value,
-      frequency: form.elements.frequency.value,
-      category: form.elements.category.value,
-    });
-    form.reset();
-    setMessage(message, "Bill added.");
-    await loadBills();
-  } catch (error) {
-    setMessage(message, error.message, true);
-  }
-});
-
-document.getElementById("debt-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const message = document.getElementById("debt-message");
-  try {
-    await apiPost(`${financeApi}/debts`, {
-      name: form.elements.name.value,
-      debt_type: form.elements.debt_type.value,
-      balance: form.elements.balance.value,
-      interest_rate: form.elements.interest_rate.value,
-      minimum_payment: form.elements.minimum_payment.value,
-      due_date: form.elements.due_date.value || null,
-    });
-    form.reset();
-    setMessage(message, "Debt added.");
-    await loadDebts();
-  } catch (error) {
-    setMessage(message, error.message, true);
-  }
-});
-
-document.getElementById("investment-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const message = document.getElementById("investment-message");
-  try {
-    await apiPost(`${financeApi}/investments`, {
-      name: form.elements.name.value,
-      ticker: form.elements.ticker.value,
-      quantity: form.elements.quantity.value || "0",
-      cost_basis: form.elements.cost_basis.value,
-      current_value: form.elements.current_value.value,
-    });
-    form.reset();
-    setMessage(message, "Investment added.");
-    await loadInvestments();
-  } catch (error) {
-    setMessage(message, error.message, true);
-  }
-});
-
-Promise.all([loadFinanceOptions(), loadBills(), loadDebts(), loadInvestments()]).catch(
-  (error) => {
-    setMessage(document.getElementById("bill-message"), error.message, true);
-  },
-);
+const sections = SECTIONS.map(setUpSection);
+loadFinanceOptions()
+  .then(() => Promise.all(sections.map((section) => section.load())))
+  .catch((error) => showMessage(document.getElementById("bill-message"), error.message, true));

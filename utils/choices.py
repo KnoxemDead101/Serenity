@@ -37,6 +37,11 @@ TRANSACTION_CATEGORIES = [
     "Investment Contribution", "Dividend", "Trading Expense", "Other",
 ]
 
+DEPENDENT_CATEGORIES = [
+    "Food", "Clothing", "Medical", "Childcare",
+    "Education", "Activities", "Supplies", "Other",
+]
+
 BILL_FREQUENCIES = [
     "Monthly",
     "Quarterly",

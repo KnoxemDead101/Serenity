@@ -3,8 +3,8 @@ Account database model.
 
 An Account is a modeled financial container: checking, savings, cash,
 brokerage, retirement, and so on. Credit cards are modeled as Debts.
-Serenity does not connect
-to real banks; the user describes their accounts here.
+Serenity does not connect to real banks; the user describes their
+accounts here.
 
 This class describes the "accounts" TABLE: one attribute per column.
 
@@ -18,11 +18,17 @@ The current balance is:
 
 It is calculated in services/account_service.py. Storing it separately
 would mean two numbers that could disagree.
+
+A NOTE ON TIME
+--------------
+Every timestamp in Serenity is stored in UTC with its time zone attached
+(`DateTime(timezone=True)`). The browser converts to local time only
+when displaying. `utc_now()` below is the one place "now" comes from.
 """
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from storage.database import Base
@@ -49,8 +55,10 @@ class Account(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    created_at: Mapped[datetime] = mapped_column(default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
     transactions: Mapped[list["Transaction"]] = relationship(
         back_populates="account", lazy="selectin"
     )

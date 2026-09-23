@@ -12,16 +12,55 @@
 const form = document.getElementById("account-form");
 const formMessage = document.getElementById("form-message");
 const accountsBody = document.getElementById("accounts-body");
+const accountSubmit = document.getElementById("account-submit");
+const accountCancel = document.getElementById("account-cancel");
 const transactionForm = document.getElementById("transaction-form");
 const transactionMessage = document.getElementById("transaction-message");
 const transactionsBody = document.getElementById("transactions-body");
 const correctionsBody = document.getElementById("corrections-body");
 const transactionCancel = document.getElementById("transaction-cancel");
 const transactionSubmit = transactionForm.querySelector('button[type="submit"]');
+
+function fillLinkSelect(select, items) {
+  const none = select.options[0];
+  select.replaceChildren(none);
+  for (const item of items) {
+    const option = document.createElement("option");
+    option.value = String(item.id);
+    option.textContent = item.label;
+    select.appendChild(option);
+  }
+}
+
+function ensureLinkOption(select, id, label) {
+  if (id === null || id === undefined || [...select.options].some((option) => option.value === String(id))) return;
+  const option = document.createElement("option");
+  option.value = String(id);
+  option.textContent = `${label} (inactive)`;
+  option.dataset.temporary = "true";
+  select.appendChild(option);
+}
+
+function removeTemporaryLinkOptions() {
+  for (const select of [transactionForm.elements.business_id, transactionForm.elements.dependent_id]) {
+    for (const option of [...select.options]) if (option.dataset.temporary) option.remove();
+  }
+}
 const categorySuggestions = document.getElementById("category-suggestions");
 const DEFAULT_TRANSACTION_TYPE = "Expense";
 let editingTransactionId = null;
 let loadedTransactions = [];
+let editingAccountId = null;
+let loadedAccounts = [];
+
+function updateTransactionSubmitState() {
+  const account = loadedAccounts.find(
+    (item) => String(item.id) === transactionForm.elements.account_id.value,
+  );
+  // Inactive accounts remain selectable for history and existing edits.
+  // The server also enforces this rule for any new transaction request.
+  transactionSubmit.disabled = !account || (!account.active && editingTransactionId === null);
+}
 
 // Fill a <select> with options that come from the backend.
 // `keepFirst` keeps an existing first option such as "Same as account".
@@ -46,8 +85,12 @@ async function loadOptions() {
   fillSelect(form.elements.classification, accountOptions.classifications);
   fillSelect(transactionForm.elements.transaction_type, transactionOptions.transaction_types);
   fillSelect(transactionForm.elements.classification, transactionOptions.classifications, true);
+  fillLinkSelect(transactionForm.elements.business_id,
+    transactionOptions.businesses.map((item) => ({ id: item.id, label: item.name })));
+  fillLinkSelect(transactionForm.elements.dependent_id,
+    transactionOptions.dependents.map((item) => ({ id: item.id, label: item.display_name })));
   categorySuggestions.replaceChildren();
-  for (const category of transactionOptions.categories) {
+  for (const category of new Set([...transactionOptions.categories, ...transactionOptions.dependent_categories])) {
     const option = document.createElement("option");
     option.value = category;
     categorySuggestions.appendChild(option);
@@ -57,6 +100,7 @@ async function loadOptions() {
 
 async function loadAccounts() {
   const accounts = await apiGet("/serenity-api/accounts");
+  loadedAccounts = accounts;
   accountsBody.replaceChildren();
   const accountSelect = transactionForm.elements.account_id;
   const selectedAccount = accountSelect.value;
@@ -64,18 +108,18 @@ async function loadAccounts() {
   for (const account of accounts) {
     const option = document.createElement("option");
     option.value = String(account.id);
-    option.textContent = `${account.name} (${formatMoney(account.current_balance)})`;
+    option.textContent = `${account.name}${account.active ? "" : " (Inactive)"} (${formatMoney(account.current_balance)})`;
     accountSelect.appendChild(option);
   }
   if (accounts.some((account) => String(account.id) === selectedAccount)) {
     accountSelect.value = selectedAccount;
   }
-  transactionSubmit.disabled = accounts.length === 0;
+  updateTransactionSubmitState();
 
   if (accounts.length === 0) {
     const row = document.createElement("tr");
     const cell = makeCell("No accounts yet. Add one above.", "muted");
-    cell.colSpan = 5;
+    cell.colSpan = 6;
     row.appendChild(cell);
     accountsBody.appendChild(row);
     renderTransactions([]);
@@ -85,15 +129,68 @@ async function loadAccounts() {
 
   for (const account of accounts) {
     const row = document.createElement("tr");
-    row.appendChild(makeCell(account.name));
+    if (!account.active) row.className = "inactive";
+    const nameCell = makeCell(account.name);
+    if (!account.active) {
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.textContent = "Inactive";
+      nameCell.append(" ", badge);
+    }
+    row.appendChild(nameCell);
     row.appendChild(makeCell(account.account_type));
     row.appendChild(makeCell(account.classification));
     row.appendChild(makeCell(account.institution || "—"));
     row.appendChild(makeCell(formatMoney(account.current_balance), "num"));
+    row.appendChild(makeActionsCell(
+      makeRowButton("Edit", "edit", account.id),
+      account.active ? makeRowButton("Deactivate", "deactivate", account.id, "secondary")
+        : makeRowButton("Reactivate", "reactivate", account.id, "secondary"),
+    ));
     accountsBody.appendChild(row);
   }
   await Promise.all([loadTransactions(), loadCorrections()]);
 }
+
+function resetAccountForm() {
+  editingAccountId = null;
+  form.reset();
+  accountSubmit.textContent = "Add account";
+  accountCancel.hidden = true;
+}
+
+function beginAccountEdit(account) {
+  editingAccountId = account.id;
+  for (const field of ["name", "account_type", "classification", "opening_balance", "institution", "notes"]) {
+    form.elements[field].value = account[field] || "";
+  }
+  accountSubmit.textContent = "Save account";
+  accountCancel.hidden = false;
+  form.elements.name.focus();
+}
+
+accountCancel.addEventListener("click", resetAccountForm);
+accountsBody.addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  const account = loadedAccounts.find((item) => item.id === Number(button.dataset.id));
+  if (!account) return;
+  if (button.dataset.action === "edit") {
+    beginAccountEdit(account);
+    return;
+  }
+  if (button.dataset.action === "deactivate" && !window.confirm(
+    `Deactivate "${account.name}"? It stays in your history and still counts toward net worth, but can't receive new transactions.`
+  )) return;
+  try {
+    await apiPost(`/serenity-api/accounts/${account.id}/${button.dataset.action}`);
+    showMessage(formMessage, button.dataset.action === "deactivate"
+      ? `Deactivated "${account.name}".` : `Reactivated "${account.name}".`, false);
+    await loadAccounts();
+  } catch (error) {
+    showMessage(formMessage, error.message, true);
+  }
+});
 
 function correctionSummary(snapshot) {
   if (!snapshot) return "Removed from active history";
@@ -147,7 +244,7 @@ function renderTransactions(transactions) {
   if (transactions.length === 0) {
     const row = document.createElement("tr");
     const cell = makeCell("No transactions yet for this account.", "muted");
-    cell.colSpan = 8;
+    cell.colSpan = 9;
     row.appendChild(cell);
     transactionsBody.appendChild(row);
     return;
@@ -159,6 +256,8 @@ function renderTransactions(transactions) {
     row.appendChild(makeCell(transaction.description));
     row.appendChild(makeCell(transaction.merchant || "—"));
     row.appendChild(makeCell(transaction.classification));
+    const forWhom = [transaction.business_name, transaction.dependent_name].filter(Boolean).join(" · ");
+    row.appendChild(makeCell(forWhom || "—"));
     const category = [transaction.category, transaction.subcategory].filter(Boolean).join(" › ");
     row.appendChild(makeCell(category || "—"));
     // Display only: the sign mirrors the type the server already stored.
@@ -205,9 +304,13 @@ function resetTransactionForm() {
   transactionForm.elements.transaction_type.value = DEFAULT_TRANSACTION_TYPE;
   transactionForm.elements.amount.value = "";
   transactionForm.elements.classification.value = "";
+  removeTemporaryLinkOptions();
+  transactionForm.elements.business_id.value = "";
+  transactionForm.elements.dependent_id.value = "";
   for (const field of TEXT_FIELDS) transactionForm.elements[field].value = "";
   transactionSubmit.textContent = "Record transaction";
   transactionCancel.hidden = true;
+  updateTransactionSubmitState();
 }
 
 function beginTransactionEdit(transaction) {
@@ -216,11 +319,17 @@ function beginTransactionEdit(transaction) {
   transactionForm.elements.transaction_type.value = transaction.transaction_type;
   transactionForm.elements.amount.value = transaction.amount;
   transactionForm.elements.classification.value = transaction.classification;
+  removeTemporaryLinkOptions();
+  ensureLinkOption(transactionForm.elements.business_id, transaction.business_id, transaction.business_name);
+  ensureLinkOption(transactionForm.elements.dependent_id, transaction.dependent_id, transaction.dependent_name);
+  transactionForm.elements.business_id.value = transaction.business_id ?? "";
+  transactionForm.elements.dependent_id.value = transaction.dependent_id ?? "";
   for (const field of TEXT_FIELDS) {
     transactionForm.elements[field].value = transaction[field] || "";
   }
   transactionSubmit.textContent = "Save changes";
   transactionCancel.hidden = false;
+  updateTransactionSubmitState();
   transactionForm.elements.date.focus();
 }
 
@@ -255,9 +364,14 @@ form.addEventListener("submit", async (event) => {
   };
 
   try {
-    const created = await apiPost("/serenity-api/accounts", body);
-    showMessage(formMessage, `Added "${created.name}".`, false);
-    form.reset();
+    if (editingAccountId === null) {
+      const created = await apiPost("/serenity-api/accounts", body);
+      showMessage(formMessage, `Added "${created.name}".`, false);
+    } else {
+      const saved = await apiPut(`/serenity-api/accounts/${editingAccountId}`, body);
+      showMessage(formMessage, `Saved "${saved.name}".`, false);
+    }
+    resetAccountForm();
     await loadAccounts();
   } catch (error) {
     showMessage(formMessage, error.message, true);
@@ -267,6 +381,7 @@ form.addEventListener("submit", async (event) => {
 resetTransactionForm();
 transactionForm.elements.account_id.addEventListener("change", () => {
   resetTransactionForm();
+  updateTransactionSubmitState();
   renderTransactions([]);
   renderCorrections([]);
   Promise.all([loadTransactions(), loadCorrections()])
@@ -303,6 +418,8 @@ transactionForm.addEventListener("submit", async (event) => {
     amount: transactionForm.elements.amount.value,
     // Empty means "use the account's classification" (decided by the server).
     classification: transactionForm.elements.classification.value || null,
+    business_id: transactionForm.elements.business_id.value ? Number(transactionForm.elements.business_id.value) : null,
+    dependent_id: transactionForm.elements.dependent_id.value ? Number(transactionForm.elements.dependent_id.value) : null,
   };
   for (const field of TEXT_FIELDS) body[field] = transactionForm.elements[field].value;
   try {

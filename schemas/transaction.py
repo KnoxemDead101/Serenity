@@ -1,13 +1,25 @@
+"""
+Transaction schemas: what the API accepts and returns for transactions.
+
+models/transaction.py  -> how a transaction is STORED (cents, columns)
+schemas/transaction.py -> what the API ACCEPTS and RETURNS (dollars, checks)
+
+These used to live in schemas/account.py. They moved here so each file
+has one job, matching the v0.2 rule "no giant all-in-one modules".
+"""
+
 from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, field_validator
 
+from schemas.timestamps import TimestampReadModel
 from utils.choices import ACCOUNT_CLASSIFICATIONS, TRANSACTION_TYPES
 from utils.validators import optional_text, require_choice, require_text, validate_money
 
 
 class TransactionCreate(BaseModel):
+    """Validated transaction data accepted by the API."""
     date: date
     transaction_type: str
     amount: Decimal
@@ -17,6 +29,8 @@ class TransactionCreate(BaseModel):
     location: str | None = None
     category: str | None = None
     subcategory: str | None = None
+    business_id: int | None = None
+    dependent_id: int | None = None
 
     @field_validator("transaction_type")
     @classmethod
@@ -40,7 +54,9 @@ class TransactionCreate(BaseModel):
     @classmethod
     def check_classification(cls, value: str | None) -> str | None:
         cleaned = optional_text(value, max_length=50)
-        return None if cleaned is None else require_choice(cleaned, ACCOUNT_CLASSIFICATIONS, "Classification")
+        if cleaned is None:
+            return None
+        return require_choice(cleaned, ACCOUNT_CLASSIFICATIONS, "Classification")
 
     @field_validator("merchant", "location", "category", "subcategory")
     @classmethod
@@ -49,10 +65,10 @@ class TransactionCreate(BaseModel):
 
 
 class TransactionUpdate(TransactionCreate):
-    pass
+    """Editable transaction fields; account ownership cannot change."""
 
 
-class TransactionRead(BaseModel):
+class TransactionRead(TimestampReadModel):
     id: int
     account_id: int
     date: date
@@ -64,11 +80,21 @@ class TransactionRead(BaseModel):
     location: str | None
     category: str | None
     subcategory: str | None
+    business_id: int | None
+    business_name: str | None
+    dependent_id: int | None
+    dependent_name: str | None
     created_at: datetime
     updated_at: datetime
 
 
 class TransactionSnapshot(BaseModel):
+    """
+    A frozen copy of a transaction at one moment (used by the history).
+
+    The newer fields are optional because snapshots saved before this
+    change don't contain them, and history is never rewritten.
+    """
     date: date
     transaction_type: str
     amount: Decimal
@@ -78,9 +104,13 @@ class TransactionSnapshot(BaseModel):
     merchant: str | None = None
     location: str | None = None
     subcategory: str | None = None
+    business_id: int | None = None
+    business_name: str | None = None
+    dependent_id: int | None = None
+    dependent_name: str | None = None
 
 
-class TransactionCorrectionRead(BaseModel):
+class TransactionCorrectionRead(TimestampReadModel):
     id: int
     transaction_id: int
     action: str

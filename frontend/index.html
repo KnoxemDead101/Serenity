@@ -13,6 +13,8 @@
       <a href="/" class="active">Dashboard</a>
       <a href="/accounts">Accounts</a>
       <a href="/finances">Finances</a>
+      <a href="/setup">Setup</a>
+      <a href="/sign-out" class="sign-out">Sign out</a>
     </nav>
   </header>
 
@@ -51,6 +53,17 @@
     <section class="cards" id="classification-cards"></section>
 
     <p id="error" class="error" hidden></p>
+
+    <section class="panel">
+      <h2>Backup</h2>
+      <p class="muted">Download a copy of everything Serenity stores, including deactivated
+        records, deleted transactions and the correction history. Keep it somewhere safe;
+        it contains all of your financial data.</p>
+      <div class="form-buttons">
+        <a class="button" href="/serenity-api/export" download>Download full backup (JSON)</a>
+        <a class="button secondary" href="/serenity-api/export/transactions.csv" download>Transactions (CSV)</a>
+      </div>
+    </section>
   </main>
 
   <script src="/static/js/api.js"></script>

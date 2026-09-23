@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, field_validator
 
+from schemas.timestamps import TimestampReadModel
 from utils.choices import BILL_FREQUENCIES, DEBT_TYPES
 from utils.validators import optional_text, require_choice, require_text, validate_money
 
@@ -62,7 +63,7 @@ class BillCreate(BaseModel):
         return optional_text(value, 1000)
 
 
-class BillRead(BaseModel):
+class BillRead(TimestampReadModel):
     id: int
     name: str
     amount: Decimal
@@ -70,8 +71,13 @@ class BillRead(BaseModel):
     frequency: str
     category: str | None
     notes: str | None
+    active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class BillUpdate(BillCreate):
+    """Full replacement payload for editing a bill."""
 
 
 class DebtCreate(BaseModel):
@@ -109,7 +115,7 @@ class DebtCreate(BaseModel):
         return optional_text(value, 1000)
 
 
-class DebtRead(BaseModel):
+class DebtRead(TimestampReadModel):
     id: int
     name: str
     debt_type: str
@@ -118,8 +124,13 @@ class DebtRead(BaseModel):
     minimum_payment: Decimal
     due_date: date | None
     notes: str | None
+    active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class DebtUpdate(DebtCreate):
+    """Full replacement payload for editing a debt."""
 
 
 class InvestmentCreate(BaseModel):
@@ -156,7 +167,7 @@ class InvestmentCreate(BaseModel):
         return optional_text(value, 1000)
 
 
-class InvestmentRead(BaseModel):
+class InvestmentRead(TimestampReadModel):
     id: int
     name: str
     ticker: str | None
@@ -164,8 +175,13 @@ class InvestmentRead(BaseModel):
     cost_basis: Decimal
     current_value: Decimal
     notes: str | None
+    active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class InvestmentUpdate(InvestmentCreate):
+    """Full replacement payload for editing an investment."""
 
 
 class FinanceSummary(BaseModel):
