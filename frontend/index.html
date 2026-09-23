@@ -3,16 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0a0a">
   <title>Serenity · Dashboard</title>
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
   <header class="topbar">
     <span class="brand">Serenity</span>
-    <nav>
-      <a href="/" class="active">Dashboard</a>
+    <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="site-nav">Menu</button>
+    <nav id="site-nav" class="site-nav" aria-label="Main">
+      <a href="/" class="active" aria-current="page">Dashboard</a>
       <a href="/accounts">Accounts</a>
       <a href="/finances">Finances</a>
+      <a href="/income">Income</a>
       <a href="/setup">Setup</a>
       <a href="/sign-out" class="sign-out">Sign out</a>
     </nav>

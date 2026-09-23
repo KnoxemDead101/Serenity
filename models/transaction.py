@@ -24,14 +24,19 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from models.account import Account, utc_now
 from models.business import Business
 from models.dependent import Dependent
+from services.ownership import OWNER_ID_MAX_LENGTH
 from storage.database import Base
 
 
 class Transaction(Base):
     __tablename__ = "transactions"
-    __table_args__ = (Index("ix_transactions_account_date", "account_id", "date"),)
+    __table_args__ = (
+        Index("ix_transactions_account_date", "account_id", "date"),
+        Index("ix_transactions_owner_id", "owner_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String(OWNER_ID_MAX_LENGTH), nullable=False)
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False)
     date: Mapped[date] = mapped_column(Date, nullable=False)
     transaction_type: Mapped[str] = mapped_column(String(20), nullable=False)

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0a0a">
+  <title>Serenity · Income</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">Serenity</span>
+    <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="site-nav">Menu</button>
+    <nav id="site-nav" class="site-nav" aria-label="Main">
+      <a href="/">Dashboard</a>
+      <a href="/accounts">Accounts</a>
+      <a href="/finances">Finances</a>
+      <a href="/income" class="active" aria-current="page">Income</a>
+      <a href="/setup">Setup</a>
+      <a href="/sign-out" class="sign-out">Sign out</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Income</h1>
+    <p class="muted">Describe how you expect to be paid. These are plans, not money received:
+      record actual paychecks as Income transactions on the Accounts page.
+      Variable income is listed but never counted as guaranteed.</p>
+
+    <section class="cards" aria-label="Income totals">
+      <div class="card"><div class="card-label">Expected gross / month</div><div class="card-value" id="gross-monthly">–</div></div>
+      <div class="card"><div class="card-label">Expected gross / year</div><div class="card-value" id="gross-annual">–</div></div>
+      <div class="card"><div class="card-label">Expected take-home / month</div><div class="card-value" id="net-monthly">–</div></div>
+      <div class="card"><div class="card-label">Active profiles</div><div class="card-value" id="active-count">–</div></div>
+    </section>
+    <p id="summary-note" class="muted" hidden></p>
+    <p id="error" class="error" hidden></p>
+
+    <section class="panel">
+      <h2 id="income-form-title">Add an income profile</h2>
+      <form id="income-form" class="wide-form form-grid">
+        <label>Name <input name="name" required maxlength="100" placeholder="e.g. Warehouse job"></label>
+        <label>Income type <select name="income_type" required></select></label>
+        <label>Pay frequency <select name="pay_frequency"></select></label>
+        <label>Classification <select name="classification" required></select></label>
+        <label data-types="Hourly">Hourly rate ($)
+          <input name="hourly_rate" type="number" min="0.01" step="0.01" inputmode="decimal">
+        </label>
+        <label data-types="Hourly">Expected hours / week
+          <input name="expected_hours_per_week" type="number" min="0.01" max="168" step="0.01" inputmode="decimal">
+          <small class="muted">What you really expect to work. Used for projections.</small>
+        </label>
+        <label data-types="Hourly">Standard hours / week <span class="muted">(optional)</span>
+          <input name="standard_hours_per_week" type="number" min="0.01" max="168" step="0.01" inputmode="decimal">
+        </label>
+        <label data-types="Salary">Annual salary ($)
+          <input name="annual_salary" type="number" min="0.01" step="0.01" inputmode="decimal">
+        </label>
+        <label data-types="Recurring Other Variable"><span id="amount-label">Amount per paycheck ($)</span>
+          <input name="amount_per_period" type="number" min="0.01" step="0.01" inputmode="decimal">
+        </label>
+        <label>Expected take-home per paycheck ($) <span class="muted">(optional)</span>
+          <input name="expected_net_per_period" type="number" min="0.01" step="0.01" inputmode="decimal">
+          <small class="muted">From your pay stub. Serenity doesn't calculate taxes.</small>
+        </label>
+        <label>Notes <span class="muted">(optional)</span>
+          <textarea name="notes" rows="2" maxlength="1000"></textarea>
+        </label>
+        <div class="form-buttons">
+          <button type="submit" id="income-submit">Add income profile</button>
+          <button type="button" id="income-cancel" class="secondary" hidden>Cancel edit</button>
+        </div>
+        <p id="income-message" class="message" hidden></p>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Your income profiles</h2>
+      <div class="table-wrap">
+        <table class="income-table">
+          <thead><tr>
+            <th>Name</th><th>Type</th><th>Frequency</th><th class="num">Per paycheck</th>
+            <th class="num">Gross / month</th><th class="num">Gross / year</th>
+            <th class="num">Take-home / month</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="incomes-body"><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/incomes.js"></script>
+</body>
+</html>

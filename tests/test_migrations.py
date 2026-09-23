@@ -6,9 +6,10 @@ import subprocess
 import sys
 
 
-def run_alembic(database_path, *args):
+def run_alembic(database_path, *args, extra_env=None):
     """Run an Alembic command against a fresh SQLite file."""
     env = {**os.environ, "DATABASE_URL": f"sqlite:///{database_path}"}
+    env.update(extra_env or {})
     result = subprocess.run(
         [sys.executable, "-m", "alembic", *args],
         env=env, capture_output=True, text=True,
@@ -16,9 +17,16 @@ def run_alembic(database_path, *args):
     assert result.returncode == 0, result.stderr
 
 
+def index_names(connection, table):
+    return {row[1] for row in connection.execute(f"PRAGMA index_list({table})")}
+
+
 def test_alembic_head_builds_expected_sqlite_schema(tmp_path):
     database_path = tmp_path / "migration-test.db"
-    run_alembic(database_path, "upgrade", "head")
+    run_alembic(
+        database_path, "upgrade", "head",
+        extra_env={"SERENITY_LEGACY_OWNER_ID": "owner-a"},
+    )
 
     connection = sqlite3.connect(database_path)
     try:
@@ -93,7 +101,10 @@ def test_0004_converts_existing_transactions(tmp_path):
     )
     connection.commit()
     connection.close()
-    run_alembic(database_path, "upgrade", "head")
+    run_alembic(
+        database_path, "upgrade", "head",
+        extra_env={"SERENITY_LEGACY_OWNER_ID": "owner-a"},
+    )
     connection = sqlite3.connect(database_path)
     try:
         rows = connection.execute(
@@ -131,9 +142,15 @@ def test_0005_upgrades_and_downgrades_cleanly(tmp_path):
     connection.commit()
     connection.close()
 
-    run_alembic(database_path, "upgrade", "head")
+    run_alembic(
+        database_path, "upgrade", "head",
+        extra_env={"SERENITY_LEGACY_OWNER_ID": "owner-a"},
+    )
     run_alembic(database_path, "downgrade", "0004_align_transactions_v02")
-    run_alembic(database_path, "upgrade", "head")
+    run_alembic(
+        database_path, "upgrade", "head",
+        extra_env={"SERENITY_LEGACY_OWNER_ID": "owner-a"},
+    )
 
     connection = sqlite3.connect(database_path)
     try:
@@ -172,7 +189,10 @@ def test_0006_preserves_existing_finance_rows_as_active(tmp_path):
     connection.commit()
     connection.close()
 
-    run_alembic(database_path, "upgrade", "head")
+    run_alembic(
+        database_path, "upgrade", "head",
+        extra_env={"SERENITY_LEGACY_OWNER_ID": "owner-a"},
+    )
     connection = sqlite3.connect(database_path)
     try:
         for table in ("bills", "debts", "investments"):
@@ -205,7 +225,10 @@ def test_0007_preserves_existing_transactions_and_adds_optional_links(tmp_path):
     connection.commit()
     connection.close()
 
-    run_alembic(database_path, "upgrade", "head")
+    run_alembic(
+        database_path, "upgrade", "head",
+        extra_env={"SERENITY_LEGACY_OWNER_ID": "owner-a"},
+    )
     connection = sqlite3.connect(database_path)
     try:
         tables = {
@@ -232,5 +255,132 @@ def test_0007_preserves_existing_transactions_and_adds_optional_links(tmp_path):
             row[1] for row in connection.execute("PRAGMA index_list(transactions)")
         }
         assert "ix_transactions_account_date" in indexes
+    finally:
+        connection.close()
+
+
+def test_0008_requires_an_explicit_owner_for_existing_data(tmp_path):
+    """Ownership migration refuses to guess who owns legacy financial data."""
+    database_path = tmp_path / "ownership-required-test.db"
+    run_alembic(database_path, "upgrade", "0007_business_and_dependents")
+    connection = sqlite3.connect(database_path)
+    now = "2026-09-23 12:00:00"
+    connection.execute(
+        "INSERT INTO accounts (id, name, account_type, classification, "
+        "opening_balance_cents, active, created_at, updated_at) "
+        "VALUES (1, 'Checking', 'Checking', 'Personal', 0, 1, ?, ?)",
+        (now, now),
+    )
+    connection.commit()
+    connection.close()
+
+    env = {**os.environ, "DATABASE_URL": f"sqlite:///{database_path}"}
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        env=env, capture_output=True, text=True,
+    )
+    assert result.returncode != 0
+    assert "SERENITY_LEGACY_OWNER_ID is required" in result.stderr
+
+
+def test_0008_backfills_all_existing_records_to_declared_owner(tmp_path):
+    """The deliberate legacy assignment covers every protected record table."""
+    database_path = tmp_path / "ownership-backfill-test.db"
+    run_alembic(database_path, "upgrade", "0007_business_and_dependents")
+    connection = sqlite3.connect(database_path)
+    now = "2026-09-23 12:00:00"
+    connection.execute(
+        "INSERT INTO accounts (id, name, account_type, classification, "
+        "opening_balance_cents, active, created_at, updated_at) "
+        "VALUES (1, 'Checking', 'Checking', 'Personal', 0, 1, ?, ?)",
+        (now, now),
+    )
+    connection.execute(
+        "INSERT INTO bills (id, name, amount_cents, due_date, frequency, "
+        "created_at, updated_at) VALUES (1, 'Rent', 100, '2026-10-01', "
+        "'Monthly', ?, ?)",
+        (now, now),
+    )
+    connection.commit()
+    connection.close()
+    run_alembic(
+        database_path, "upgrade", "head",
+        extra_env={"SERENITY_LEGACY_OWNER_ID": "owner-a"},
+    )
+
+    connection = sqlite3.connect(database_path)
+    try:
+        for table in (
+            "accounts", "bills", "debts", "investments", "businesses",
+            "dependents", "transactions", "transaction_corrections",
+        ):
+            assert connection.execute(
+                f"SELECT DISTINCT owner_id FROM {table}"
+            ).fetchall() in ([], [("owner-a",)])
+    finally:
+        connection.close()
+
+
+def test_0008_empty_database_needs_no_legacy_owner(tmp_path):
+    path = tmp_path / "empty-ownership.db"
+    env = {**os.environ, "DATABASE_URL": f"sqlite:///{path}"}
+    env.pop("SERENITY_LEGACY_OWNER_ID", None)
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "0008_record_ownership"],
+        env=env, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_0009_adds_owner_lookup_indexes_and_downgrades(tmp_path):
+    database_path = tmp_path / "owner-indexes-test.db"
+    run_alembic(database_path, "upgrade", "0009_owner_id_indexes")
+    connection = sqlite3.connect(database_path)
+    try:
+        expected = {
+            "accounts": "ix_accounts_owner_id",
+            "bills": "ix_bills_owner_id",
+            "debts": "ix_debts_owner_id",
+            "investments": "ix_investments_owner_id",
+            "transactions": "ix_transactions_owner_id",
+            "transaction_corrections": "ix_transaction_corrections_owner_id",
+        }
+        for table, index in expected.items():
+            assert index in index_names(connection, table)
+    finally:
+        connection.close()
+    run_alembic(database_path, "downgrade", "0008_record_ownership")
+    run_alembic(database_path, "upgrade", "0009_owner_id_indexes")
+
+
+def test_0010_creates_owner_scoped_income_profiles_and_downgrades(tmp_path):
+    database_path = tmp_path / "income-profiles-test.db"
+    run_alembic(database_path, "upgrade", "head")
+    connection = sqlite3.connect(database_path)
+    try:
+        columns = {
+            row[1]: row for row in connection.execute("PRAGMA table_info(income_profiles)")
+        }
+        assert {
+            "owner_id", "name", "income_type", "classification", "pay_frequency",
+            "hourly_rate_cents", "standard_hours_hundredths",
+            "expected_hours_hundredths", "annual_salary_cents",
+            "amount_per_period_cents", "expected_net_per_period_cents",
+            "notes", "active", "created_at", "updated_at",
+        } <= set(columns)
+        assert columns["owner_id"][3] == 1
+        assert columns["pay_frequency"][3] == 0
+        assert "ix_income_profiles_owner_id" in index_names(connection, "income_profiles")
+    finally:
+        connection.close()
+    run_alembic(database_path, "downgrade", "0009_owner_id_indexes")
+    connection = sqlite3.connect(database_path)
+    try:
+        tables = {
+            row[0] for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        assert "income_profiles" not in tables
     finally:
         connection.close()

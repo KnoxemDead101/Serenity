@@ -1,10 +1,4 @@
-"""Download routes for complete Serenity backups and transaction CSVs.
-
-These endpoints intentionally have no authentication layer because Serenity
-currently has no user accounts.  Anyone who can reach the app can download
-the financial data, so deployment access control must be configured before
-real data is used.
-"""
+"""Download routes for owner-scoped Serenity backups and transaction CSVs."""
 
 import json
 from datetime import date
@@ -13,6 +7,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from auth import require_session
 from services import export_service
 from storage.database import get_db
 
@@ -28,18 +23,22 @@ def _download(content: str, filename: str, media_type: str) -> Response:
 
 
 @router.get("")
-def export_everything(db: Session = Depends(get_db)):
+def export_everything(
+    user_id: str = Depends(require_session), db: Session = Depends(get_db)
+):
     return _download(
-        json.dumps(export_service.build_export(db), indent=2),
+        json.dumps(export_service.build_export(db, user_id), indent=2),
         f"serenity-backup-{date.today().isoformat()}.json",
         "application/json",
     )
 
 
 @router.get("/transactions.csv")
-def export_transactions_csv(db: Session = Depends(get_db)):
+def export_transactions_csv(
+    user_id: str = Depends(require_session), db: Session = Depends(get_db)
+):
     return _download(
-        export_service.build_transactions_csv(db),
+        export_service.build_transactions_csv(db, user_id),
         f"serenity-transactions-{date.today().isoformat()}.csv",
         "text/csv",
     )

@@ -29,7 +29,9 @@ JavaScript. Money is stored as integer cents. Interest rates use thousandths of
 a percent, investment quantities use integer units with eight decimal places,
 and every timestamp is UTC.
 
-See `docs/architecture.md` and `docs/data-model.md` for details.
+See `docs/architecture.md` and `docs/data-model.md` for details. For a
+non-Replit deployment, read `docs/HOSTING.md` first: the managed Clerk tenant
+cannot be exported and financial-record ownership needs a verified migration.
 
 ## Local development
 
@@ -66,9 +68,21 @@ at the latest migration, and runs the tests. Replit Publish then compares and
 applies the development-to-production schema structure. This does not validate
 or transform production data automatically.
 
-The export endpoints contain the complete financial dataset and are currently
-unauthenticated. Restrict the published app (for example, Replit Invite only)
-before publishing; the links are not an access-control mechanism.
+All financial pages, APIs, and exports require an authenticated Clerk user.
+Serenity's signed cookie binds to the verified Clerk session and user. On every
+protected request, the server checks that exact session is still active and
+belongs to the same user. Revoking a Clerk session blocks its next request
+(including exports and writes); another session for the same user is unaffected.
+If Clerk's Backend API is unavailable, protected requests deny access until
+it recovers. Each request incurs a Clerk lookup (up to an 8-second timeout);
+there is no cross-request positive cache. Cookies issued before session binding
+are rejected, so users must sign in again after this update.
+
+If an already-open page receives a protected API 401, the browser immediately
+removes displayed financial values and any unsaved form contents, then shows
+sign-in and manual retry choices. It does not silently retry or redirect during
+Clerk outages. Retry checks the session once and reloads only if valid; sign-in
+returns only to a validated same-origin path. No draft or token is persisted.
 
 Production starts with:
 

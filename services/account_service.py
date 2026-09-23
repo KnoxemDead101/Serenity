@@ -22,13 +22,15 @@ from sqlalchemy.orm import Session
 from models.account import Account
 from schemas.account import AccountCreate, AccountRead, AccountTotals, AccountUpdate
 from services import transaction_service
+from services.ownership import require_owner_id
 from utils.choices import ACCOUNT_CLASSIFICATIONS
 from utils.money import cents_to_dollars, dollars_to_cents
 
 
-def create_account(db: Session, data: AccountCreate) -> Account:
+def create_account(db: Session, data: AccountCreate, owner_id: str) -> Account:
     """Save a validated account using integer cents in storage."""
     account = Account(
+        owner_id=require_owner_id(owner_id),
         name=data.name, account_type=data.account_type, classification=data.classification,
         opening_balance_cents=dollars_to_cents(data.opening_balance),
         institution=data.institution, notes=data.notes,
@@ -60,14 +62,20 @@ def set_account_active(db: Session, account: Account, active: bool) -> Account:
     return account
 
 
-def list_accounts(db: Session) -> list[Account]:
+def list_accounts(db: Session, owner_id: str) -> list[Account]:
     """Return accounts alphabetically by name."""
-    return list(db.scalars(select(Account).order_by(Account.name)))
+    return list(db.scalars(
+        select(Account).where(
+            Account.owner_id == require_owner_id(owner_id)
+        ).order_by(Account.name)
+    ))
 
 
-def get_account(db: Session, account_id: int) -> Account | None:
+def get_account(db: Session, account_id: int, owner_id: str) -> Account | None:
     """Return one account by id, or None when it does not exist."""
-    return db.get(Account, account_id)
+    return db.scalar(select(Account).where(
+        Account.id == account_id, Account.owner_id == require_owner_id(owner_id)
+    ))
 
 
 def calculate_current_balance_cents(account: Account) -> int:
@@ -102,7 +110,7 @@ def to_account_read(account: Account) -> AccountRead:
     )
 
 
-def get_account_totals(db: Session) -> AccountTotals:
+def get_account_totals(db: Session, owner_id: str) -> AccountTotals:
     """
     Add up balances across all accounts, overall and by classification.
 
@@ -110,7 +118,7 @@ def get_account_totals(db: Session) -> AccountTotals:
     Debts, including credit cards, are summarized separately and are not
     duplicated in account balances.
     """
-    accounts = list_accounts(db)
+    accounts = list_accounts(db, owner_id)
     # Start every classification at 0 so the dashboard always shows all four.
     cents_by_classification: dict[str, int] = defaultdict(int)
     for classification in ACCOUNT_CLASSIFICATIONS:

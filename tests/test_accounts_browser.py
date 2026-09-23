@@ -17,7 +17,8 @@ def page(client):
         browser = playwright.chromium.launch(
             executable_path=executable, headless=True, args=["--no-sandbox"]
         )
-        page = browser.new_page()
+        context = browser.new_context()
+        page = context.new_page()
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
 
@@ -36,7 +37,7 @@ def page(client):
                 headers={"content-type": response.headers.get("content-type", "text/plain")},
             )
 
-        page.route("**/*", dispatch)
+        page.context.route("**/*", dispatch)
         try:
             yield page
             assert errors == [], f"Uncaught browser errors: {errors}"
@@ -308,3 +309,181 @@ def test_setup_page_manages_business_and_dependent_surfaces(page, client):
     expect(page.get_by_role("heading", name="Dependents")).to_be_visible()
     expect(page.locator("#business-form [name=name]")).to_be_visible()
     expect(page.locator("#dependent-form [name=display_name]")).to_be_visible()
+
+
+def test_revocation_clears_open_financial_page_and_outage_does_not_loop(page, client):
+    add_account(client, "Private emergency fund", "4321.00")
+    page.goto("http://serenity.test/accounts")
+    expect(page.locator("#accounts-body")).to_contain_text("Private emergency fund")
+    page.locator("#account-form [name=notes]").fill("Unsubmitted sensitive note")
+    page.route("**/serenity-api/accounts", lambda route: route.fulfill(
+        status=401, content_type="application/json", body='{"detail":"Sign in required"}'
+    ))
+    # A protected request from an already-open page, not a page load.
+    page.evaluate("apiGet('/serenity-api/accounts').catch(() => {})")
+    recovery = page.get_by_role("alert")
+    expect(recovery).to_contain_text("Your session has ended")
+    assert "Private emergency fund" not in page.locator("main").inner_text()
+    assert "Unsubmitted sensitive note" not in page.locator("main").inner_text()
+    expect(page.locator("#account-form")).to_have_count(0)
+    sign_in = recovery.get_by_role("link", name="Sign in again")
+    assert sign_in.get_attribute("href") == "/sign-in?next=%2Faccounts"
+    assert page.url == "http://serenity.test/accounts"
+
+    checks = []
+    def backend_unavailable(route):
+        checks.append(route.request.url)
+        route.fulfill(status=503, content_type="application/json",
+                      body='{"detail":"Temporarily unavailable"}')
+
+    page.route("**/serenity-api/auth/me", backend_unavailable)
+    recovery.get_by_role("button", name="Retry session").click()
+    expect(recovery.get_by_role("status")).to_contain_text("still unavailable")
+    assert len(checks) == 1
+    assert page.url == "http://serenity.test/accounts"
+    page.wait_for_timeout(300)
+    assert len(checks) == 1  # no automatic retries or redirects
+    assert "Private emergency fund" not in page.locator("main").inner_text()
+
+
+def test_safe_return_path_rejects_external_destinations(page, client):
+    page.goto("http://serenity.test/accounts")
+    assert page.evaluate("safeReturnPath('//attacker.test/steal')") == "/"
+    assert page.evaluate("safeReturnPath('/\\\\attacker.test')") == "/"
+    assert page.evaluate("safeReturnPath('https://attacker.test/')") == "/"
+    assert page.evaluate("safeReturnPath('/accounts?filter=checking')") == "/accounts?filter=checking"
+    page.add_script_tag(url="http://serenity.test/static/js/auth.js")
+    assert page.evaluate("safeSignInReturnPath('//attacker.test')") == "/"
+    assert page.evaluate("safeSignInReturnPath('/\\\\attacker.test')") == "/"
+    assert page.evaluate("safeSignInReturnPath('/accounts?filter=checking')") == "/accounts?filter=checking"
+
+
+def test_sign_out_clears_an_idle_second_tab_even_when_clerk_fails(page, client):
+    add_account(client, "Cross-tab private savings", "4321.00")
+    page.goto("http://serenity.test/accounts")
+    other = page.context.new_page()
+    other.goto("http://serenity.test/accounts")
+    expect(other.locator("#accounts-body")).to_contain_text("Cross-tab private savings")
+    other.locator("#account-form [name=notes]").fill("Private unsaved draft")
+    other.evaluate("""() => {
+        window.signOutMessages = [];
+        window.observer = new BroadcastChannel("serenity-session");
+        observer.onmessage = event => signOutMessages.push(event.data);
+    }""")
+    # Exercise the real sign-out page, but simulate the Clerk CDN being down.
+    deletes = []
+    page.route("**/serenity-api/auth/session", lambda route: (
+        deletes.append(route.request.method),
+        route.fulfill(status=204, body="")
+    ))
+    page.context.route("https://cdn.jsdelivr.net/**", lambda route: route.abort())
+    page.goto("http://serenity.test/sign-out")
+    expect(other.get_by_role("alert")).to_contain_text("Your session has ended")
+    expect(page).to_have_url("http://serenity.test/sign-in")
+    assert deletes == ["DELETE"]
+    assert other.evaluate("signOutMessages") == ["signed-out"]
+    assert "Cross-tab private savings" not in other.locator("main").inner_text()
+    assert "4,321.00" not in other.locator("main").inner_text()
+    expect(other.locator("#account-form")).to_have_count(0)
+    assert other.url == "http://serenity.test/accounts"
+    assert other.evaluate("Object.keys(localStorage)") == []
+    assert other.evaluate("Object.keys(sessionStorage)") == []
+    # A late successful response must not restore data after the notification.
+    assert other.evaluate("""async () => {
+        try {
+            await handleResponse(new Response('{"name":"private"}', {status:200}));
+            return false;
+        } catch { return true; }
+    }""")
+    other.close()
+
+
+def test_tab_revisit_detects_revocation_without_broadcast_channel(page, client):
+    add_account(client, "Revoked-session savings", "123.00")
+    page.goto("http://serenity.test/accounts")
+    other = page.context.new_page()
+    other.add_init_script("window.BroadcastChannel = undefined")
+    other.goto("http://serenity.test/accounts")
+    expect(other.locator("#accounts-body")).to_contain_text("Revoked-session savings")
+    other.locator("#account-form [name=notes]").fill("Draft to discard")
+    checks = []
+
+    def revoked(route):
+        checks.append(route.request.url)
+        route.fulfill(status=401, content_type="application/json", body="{}")
+
+    other.route("**/serenity-api/auth/me", revoked)
+    # Headless Chromium does not reliably hide pages on bring_to_front.
+    # Drive the browser visibility event explicitly to model leaving/returning.
+    other.evaluate("""() => {
+        Object.defineProperty(document, "visibilityState", {
+            configurable: true, value: "hidden"
+        });
+        document.dispatchEvent(new Event("visibilitychange"));
+    }""")
+    page.bring_to_front()
+    assert checks == []
+    other.evaluate("""() => {
+        Object.defineProperty(document, "visibilityState", {
+            configurable: true, value: "visible"
+        });
+        document.dispatchEvent(new Event("visibilitychange"));
+        window.dispatchEvent(new Event("focus"));
+    }""")
+    expect(other.get_by_role("alert")).to_contain_text("Your session has ended")
+    expect(other.locator("#account-form")).to_have_count(0)
+    assert "Revoked-session savings" not in other.locator("main").inner_text()
+    assert checks == ["http://serenity.test/serenity-api/auth/me"]
+    other.evaluate("window.dispatchEvent(new Event('focus'))")
+    other.wait_for_timeout(400)
+    assert len(checks) == 1
+    assert other.url == "http://serenity.test/accounts"
+    other.close()
+
+
+def test_focus_session_checks_are_bounded_and_outage_never_redirects(page, client):
+    page.clock.install()
+    page.goto("http://serenity.test/accounts")
+    checks = []
+
+    def unavailable(route):
+        checks.append(route.request.url)
+        route.fulfill(status=503, content_type="application/json", body="{}")
+
+    page.route("**/serenity-api/auth/me", unavailable)
+    page.evaluate("""() => {
+        for (let i = 0; i < 20; i++) {
+            window.dispatchEvent(new Event("focus"));
+            document.dispatchEvent(new Event("visibilitychange"));
+        }
+    }""")
+    page.clock.run_for(300)
+    page.wait_for_function("sessionCheckInFlight === false")
+    assert len(checks) == 1
+    page.evaluate("window.dispatchEvent(new Event('focus'))")
+    page.clock.run_for(14000)
+    assert len(checks) == 1
+    page.clock.run_for(1100)
+    page.wait_for_function("sessionCheckInFlight === false")
+    assert len(checks) == 2
+    page.clock.run_for(60000)
+    assert len(checks) == 2  # no polling or automatic outage retries
+    assert page.url == "http://serenity.test/accounts"
+    expect(page.get_by_role("alert")).to_have_count(0)
+
+
+def test_manual_retry_only_reopens_page_after_server_confirms_session(page, client):
+    add_account(client, "Private savings", "52.00")
+    page.goto("http://serenity.test/accounts")
+    expect(page.locator("#accounts-body")).to_contain_text("Private savings")
+    page.route("**/serenity-api/accounts", lambda route: route.fulfill(
+        status=401, content_type="application/json", body='{"detail":"Sign in required"}'
+    ), times=1)
+    page.evaluate("apiGet('/serenity-api/accounts').catch(() => {})")
+    expect(page.get_by_role("alert")).to_be_visible()
+    page.route("**/serenity-api/auth/me", lambda route: route.fulfill(
+        status=200, content_type="application/json", body='{"user_id":"test-owner"}'
+    ))
+    page.get_by_role("button", name="Retry session").click()
+    expect(page.locator("#accounts-body")).to_contain_text("Private savings")
+    expect(page.get_by_role("alert")).to_have_count(0)

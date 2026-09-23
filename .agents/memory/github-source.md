@@ -1,9 +1,10 @@
 ---
-name: Private GitHub source
+name: GitHub source sync
 description: How to access the upstream Serenity repository for future source syncs.
 ---
 
-The upstream Serenity repository is private, so source syncs must use the authenticated GitHub integration rather than an unauthenticated shell `git clone`.
+Use the authenticated GitHub integration for source syncs. Check current repository
+visibility before uploading; do not assume historical visibility still applies.
 
 **Why:** The shell clone path rejected the repository credentials, while the connected GitHub integration can read the repository without exposing credentials.
 

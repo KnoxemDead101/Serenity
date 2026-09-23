@@ -16,3 +16,10 @@ application has a real compilation or asset-build step. To remove a previously
 saved build command through deployment configuration, pass an explicit empty
 build list; omitting the build field preserves the old value. Keep post-merge
 setup limited to idempotent local initialization such as development migrations.
+
+After an isolated task merge adds a Python dependency, confirm it is actually
+installed in the main workspace; a requirements-file merge alone may not install it.
+Use Replit's package-management installation callback to reconcile missing packages.
+
+**Why:** A merged authentication dependency was declared correctly but the main
+workspace still crashed on import until the managed package installer ran.

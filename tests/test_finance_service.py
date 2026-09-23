@@ -5,6 +5,8 @@ import pytest
 from models.bill import Bill
 from schemas.finance import DebtCreate, InvestmentCreate
 from services import finance_service
+from conftest import TEST_OWNER_ID
+from services.ownership import MissingOwnerError
 
 
 def test_monthly_bill_normalization_rounds_once():
@@ -33,6 +35,7 @@ def test_precise_interest_rate_round_trip(db):
             interest_rate=Decimal("6.875"),
             minimum_payment=Decimal("50.00"),
         ),
+        TEST_OWNER_ID,
     )
     result = finance_service.to_debt_read(debt)
     assert result.interest_rate == Decimal("6.875")
@@ -58,6 +61,14 @@ def test_fractional_investment_quantity_round_trip(db):
             cost_basis=Decimal("10.00"),
             current_value=Decimal("12.00"),
         ),
+        TEST_OWNER_ID,
     )
     result = finance_service.to_investment_read(investment)
     assert result.quantity == Decimal("0.12345678")
+
+
+def test_finance_service_reads_require_an_owner(db):
+    with pytest.raises(TypeError):
+        finance_service.list_bills(db)  # type: ignore[call-arg]
+    with pytest.raises(MissingOwnerError):
+        finance_service.list_debts(db, " ")

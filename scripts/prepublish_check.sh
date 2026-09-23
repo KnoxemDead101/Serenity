@@ -26,5 +26,8 @@ if ((${#current[@]} == 0 || ${#heads[@]} == 0)) ||
 fi
 
 echo "Running tests..."
-pytest -q
+echo "Verifying browser tests are available..."
+SERENITY_REQUIRE_BROWSER=1 pytest --collect-only -q \
+  tests/test_responsive_browser.py tests/test_income_browser.py
+SERENITY_REQUIRE_BROWSER=1 pytest -q
 echo "Development checks passed. Publish still manages the production schema."

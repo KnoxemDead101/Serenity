@@ -47,3 +47,9 @@ timeoutMs = 120000
 [nix]
 channel = "stable-25_05"
 packages = ["gitFull", "playwright-driver", "postgresql"]
+
+[userenv]
+
+[userenv.production]
+SERENITY_AUTHORIZED_PARTIES = "https://serenity--lknox3.replit.app"
+SERENITY_CHECK_PUBLISHED_ORIGIN = "https://serenity--lknox3.replit.app"

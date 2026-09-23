@@ -269,6 +269,7 @@ def test_old_snapshots_without_new_fields_still_display(client, db):
         "amount": "1.00", "description": "Now",
     }).json()
     db.add(TransactionCorrection(
+        owner_id="test-owner",
         account_id=account["id"], transaction_id=transaction["id"], action="Updated",
         before={"date": "2026-09-01", "transaction_type": "Deposit",
                 "amount_cents": 100, "description": "Then", "category": None},

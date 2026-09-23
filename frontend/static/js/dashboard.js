@@ -37,6 +37,7 @@ async function loadDashboard() {
 
 loadDashboard().catch((error) => {
   const errorEl = document.getElementById("error");
+  if (!errorEl) return; // Session recovery has already removed the dashboard.
   errorEl.textContent = error.message;
   errorEl.hidden = false;
 });

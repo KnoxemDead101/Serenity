@@ -21,7 +21,16 @@ from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from api import accounts, businesses, dashboard, dependents, export, finance, transactions
+from api import (
+    accounts,
+    businesses,
+    dashboard,
+    dependents,
+    export,
+    finance,
+    income_profiles,
+    transactions,
+)
 from auth import (
     AUTH_COOKIE,
     bearer_token,
@@ -48,13 +57,13 @@ def auth_config():
 @auth_router.post("/session")
 def create_session(request: Request):
     token = bearer_token(request)
-    user_id = verify_clerk_token(token) if token else None
-    if user_id is None:
+    identity = verify_clerk_token(token) if token else None
+    if identity is None:
         return JSONResponse({"detail": "Valid sign-in required"}, status_code=401)
     response = JSONResponse({"authenticated": True})
     response.set_cookie(
         AUTH_COOKIE,
-        issue_session(user_id),
+        issue_session(*identity),
         httponly=True,
         secure=os.getenv("SERENITY_DEV") != "1",
         samesite="lax",
@@ -86,6 +95,7 @@ for router in (
     export.router,
     businesses.router,
     dependents.router,
+    income_profiles.router,
 ):
     app.include_router(router, dependencies=[Depends(require_session)])
 
@@ -106,6 +116,11 @@ def accounts_page(_: str = Depends(require_page_session)):
 @app.get("/finances", include_in_schema=False)
 def finances_page(_: str = Depends(require_page_session)):
     return FileResponse(FRONTEND_DIR / "finances.html")
+
+
+@app.get("/income", include_in_schema=False)
+def income_page(_: str = Depends(require_page_session)):
+    return FileResponse(FRONTEND_DIR / "incomes.html")
 
 
 @app.get("/setup", include_in_schema=False)

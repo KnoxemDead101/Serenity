@@ -12,17 +12,20 @@ shares are exact (0.5 shares -> 50,000,000). See utils/money.py.
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, true
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from models.account import utc_now
+from services.ownership import OWNER_ID_MAX_LENGTH
 from storage.database import Base
 
 
 class Investment(Base):
     __tablename__ = "investments"
+    __table_args__ = (Index("ix_investments_owner_id", "owner_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String(OWNER_ID_MAX_LENGTH), nullable=False)
     name: Mapped[str] = mapped_column(String(100))
     ticker: Mapped[str | None] = mapped_column(String(20))
     quantity_units: Mapped[int] = mapped_column(Integer, default=0)

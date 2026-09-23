@@ -8,17 +8,20 @@ separate prevents counting the same spending twice.
 
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Integer, String, Text, true
+from sqlalchemy import Boolean, Date, DateTime, Index, Integer, String, Text, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from models.account import utc_now
+from services.ownership import OWNER_ID_MAX_LENGTH
 from storage.database import Base
 
 
 class Bill(Base):
     __tablename__ = "bills"
+    __table_args__ = (Index("ix_bills_owner_id", "owner_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String(OWNER_ID_MAX_LENGTH), nullable=False)
     name: Mapped[str] = mapped_column(String(100))
     amount_cents: Mapped[int] = mapped_column(Integer, default=0)
     due_date: Mapped[date] = mapped_column(Date)

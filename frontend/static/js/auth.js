@@ -44,8 +44,21 @@ async function establishSerenitySession(clerk) {
   });
   if (!response.ok) throw new Error("The sign-in session could not be created.");
   const next = new URLSearchParams(window.location.search).get("next") || "/";
-  window.location.assign(next.startsWith("/") ? next : "/");
+  window.location.assign(safeSignInReturnPath(next));
   return true;
+}
+
+function safeSignInReturnPath(value) {
+  if (!value.startsWith("/") || value.startsWith("//") ||
+      /[\\\u0000-\u001f\u007f]/.test(value)) return "/";
+  try {
+    const target = new URL(value, window.location.origin);
+    return target.origin === window.location.origin &&
+      target.pathname !== "/sign-in" && target.pathname !== "/sign-out"
+      ? target.pathname + target.search : "/";
+  } catch {
+    return "/";
+  }
 }
 
 async function showSignIn() {
@@ -72,10 +85,23 @@ async function showSignIn() {
 }
 
 async function signOutOfSerenity() {
+  // Clear idle financial tabs immediately, even if loading Clerk is slow.
+  // No tokens, user identifiers, or drafts are sent or stored.
   try {
-    const clerk = await loadClerk();
+    const channel = new BroadcastChannel("serenity-session");
+    channel.postMessage("signed-out");
+    channel.close();
+  } catch {
+    // Restricted browsers rely on the visibility-time server check.
+  }
+  try {
+    // Clear our cookie before loading the third-party SDK, so a CDN outage
+    // cannot prevent Serenity's own sign-out request.
     await fetch("/serenity-api/auth/session", { method: "DELETE" });
+    const clerk = await loadClerk();
     await clerk.signOut();
+  } catch {
+    // The sign-in page provides recovery if the auth service is unavailable.
   } finally {
     window.location.assign("/sign-in");
   }

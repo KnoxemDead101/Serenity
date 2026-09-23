@@ -1,0 +1,30 @@
+# Serenity — Development Progress
+
+Docs (newest first):
+- `security-theme-income-report-2026-09-23.md` — P2/P3/P4 packages: 16-point report (security → theme → Income Profiles)
+- `v0.3-inspection-and-plan.md` — plan approved 9/23
+- `serenity_v0_3_handoff.md` — v0.3 implementation handoff (planning system direction)
+- `status-handoff-2026-09-23.md` — standalone status summary (for ChatGPT/brainstorming)
+- `replit-stabilization-review.md`, `v0.2-review-and-stabilization-plan.md` — earlier reviews
+- `serenity_v0_2_handoff.md`, `serenity_v0_1_handoff.md` — specs
+
+## Decisions (9/23)
+- A Business link requires classification Business: it defaults to Business when blank, and an explicit mismatch is rejected (422).
+- "Shared / All Children" is its own Dependent: no percentages.
+- Deactivated **accounts** still count toward net worth but reject new transactions. Deactivated bills, debts, investments and income profiles leave the totals.
+- Export is backup-only; there is no restore yet.
+- Production: Replit Publish copies structure only; production never runs Alembic. Run `scripts/prepublish_check.sh` before every publish.
+- Ownership: `owner_id` is required on every record, with no default and no test-user bypass. Tests sign in via `dependency_overrides`.
+- Income Profiles are plans, not transactions. Monthly = yearly ÷ 12 (never weekly × 4). Variable income is never projected. There is no tax engine: net is the user's own take-home figure.
+- Theme: dark near-black, white text, gold primary, restrained red accent, the system-ui font.
+
+## Packages
+- Applied earlier: A1 (0005), A2 (0006), A3 export, B business/dependents (0007). Replit then added Clerk auth and 0008 ownership.
+- Delivered 9/23, applied in order and not yet run in Replit:
+  - **P2** security, migration 0009
+  - **P3** responsive/theme, no migration
+  - **P4** Income Profiles, migration 0010, plus `git rm models/income.py`
+
+## Next
+- Leighton: apply P2 → P3 → P4, running prepublish_check after each. Run `check_production_rows.py` against production before publishing, then do the Clerk smoke test.
+- Architectural review before Goals. The open questions are in section 16 of the report.

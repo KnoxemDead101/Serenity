@@ -12,6 +12,7 @@ from schemas.transaction import (
     TransactionCorrectionRead, TransactionCreate, TransactionRead,
     TransactionSnapshot, TransactionUpdate,
 )
+from services.ownership import require_owner_id
 from utils.money import cents_to_dollars, dollars_to_cents
 
 
@@ -38,11 +39,14 @@ def resolve_classification(account: Account, requested: str | None) -> str:
 
 
 def _resolve_business(
-    db: Session, business_id: int | None, existing: Transaction | None
+    db: Session, business_id: int | None, owner_id: str,
+    existing: Transaction | None
 ) -> Business | None:
     if business_id is None:
         return None
-    business = db.get(Business, business_id)
+    business = db.scalar(select(Business).where(
+        Business.id == business_id, Business.owner_id == owner_id
+    ))
     if business is None:
         raise TransactionRuleError("That business doesn't exist.")
     if business.active is None:
@@ -55,11 +59,14 @@ def _resolve_business(
 
 
 def _resolve_dependent(
-    db: Session, dependent_id: int | None, existing: Transaction | None
+    db: Session, dependent_id: int | None, owner_id: str,
+    existing: Transaction | None
 ) -> Dependent | None:
     if dependent_id is None:
         return None
-    dependent = db.get(Dependent, dependent_id)
+    dependent = db.scalar(select(Dependent).where(
+        Dependent.id == dependent_id, Dependent.owner_id == owner_id
+    ))
     if dependent is None:
         raise TransactionRuleError("That dependent doesn't exist.")
     if dependent.active is None:
@@ -75,8 +82,8 @@ def _apply_fields(
     db: Session, transaction: Transaction, account: Account,
     data: TransactionCreate, existing: Transaction | None = None,
 ) -> None:
-    business = _resolve_business(db, data.business_id, existing)
-    dependent = _resolve_dependent(db, data.dependent_id, existing)
+    business = _resolve_business(db, data.business_id, account.owner_id, existing)
+    dependent = _resolve_dependent(db, data.dependent_id, account.owner_id, existing)
     if business is not None and data.classification not in (None, "Business"):
         raise TransactionRuleError(
             f'A transaction linked to "{business.name}" must be classified as Business.'
@@ -104,7 +111,7 @@ def create_transaction(db: Session, account: Account, data: TransactionCreate) -
         raise TransactionRuleError(
             "This account is deactivated. Reactivate it to record new transactions."
         )
-    transaction = Transaction()
+    transaction = Transaction(owner_id=require_owner_id(account.owner_id))
     _apply_fields(db, transaction, account, data)
     account.transactions.append(transaction)
     db.commit()
@@ -112,15 +119,23 @@ def create_transaction(db: Session, account: Account, data: TransactionCreate) -
     return transaction
 
 
-def list_transactions(db: Session, account_id: int) -> list[Transaction]:
+def list_transactions(
+    db: Session, account_id: int, owner_id: str
+) -> list[Transaction]:
     return list(db.scalars(select(Transaction).where(
-        Transaction.account_id == account_id, Transaction.deleted_at.is_(None)
+        Transaction.account_id == account_id,
+        Transaction.owner_id == require_owner_id(owner_id),
+        Transaction.deleted_at.is_(None)
     ).order_by(Transaction.date.desc(), Transaction.id.desc())))
 
 
-def get_transaction(db: Session, account_id: int, transaction_id: int) -> Transaction | None:
+def get_transaction(
+    db: Session, account_id: int, transaction_id: int,
+    owner_id: str,
+) -> Transaction | None:
     return db.scalar(select(Transaction).where(
         Transaction.id == transaction_id, Transaction.account_id == account_id,
+        Transaction.owner_id == require_owner_id(owner_id),
         Transaction.deleted_at.is_(None)
     ))
 
@@ -145,7 +160,8 @@ def transaction_snapshot(transaction: Transaction) -> dict:
 
 def record_correction(db: Session, transaction: Transaction, action: str, before: dict) -> None:
     db.add(TransactionCorrection(
-        account_id=transaction.account_id, transaction_id=transaction.id, action=action,
+        owner_id=transaction.owner_id, account_id=transaction.account_id,
+        transaction_id=transaction.id, action=action,
         changed_at=utc_now(), before=before,
         after=transaction_snapshot(transaction) if action == "Updated" else None,
     ))
@@ -167,9 +183,12 @@ def delete_transaction(db: Session, transaction: Transaction) -> None:
     db.commit()
 
 
-def list_corrections(db: Session, account_id: int) -> list[TransactionCorrection]:
+def list_corrections(
+    db: Session, account_id: int, owner_id: str
+) -> list[TransactionCorrection]:
     return list(db.scalars(select(TransactionCorrection).where(
-        TransactionCorrection.account_id == account_id
+        TransactionCorrection.account_id == account_id,
+        TransactionCorrection.owner_id == require_owner_id(owner_id),
     ).order_by(TransactionCorrection.changed_at.desc(), TransactionCorrection.id.desc())))
 
 

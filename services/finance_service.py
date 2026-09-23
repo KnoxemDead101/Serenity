@@ -28,6 +28,7 @@ from schemas.finance import (
     InvestmentRead,
     InvestmentUpdate,
 )
+from services.ownership import require_owner_id
 from utils.choices import BILL_FREQUENCIES, DEBT_TYPES
 from utils.money import (
     cents_to_dollars,
@@ -53,8 +54,9 @@ def is_active(record: Bill | Debt | Investment) -> bool:
 # Bills
 # ---------------------------------------------------------------------------
 
-def create_bill(db: Session, data: BillCreate) -> Bill:
+def create_bill(db: Session, data: BillCreate, owner_id: str) -> Bill:
     bill = Bill(
+        owner_id=require_owner_id(owner_id),
         name=data.name,
         amount_cents=dollars_to_cents(data.amount),
         due_date=data.due_date,
@@ -68,12 +70,16 @@ def create_bill(db: Session, data: BillCreate) -> Bill:
     return bill
 
 
-def list_bills(db: Session) -> list[Bill]:
-    return list(db.scalars(select(Bill).order_by(Bill.due_date, Bill.name)))
+def list_bills(db: Session, owner_id: str) -> list[Bill]:
+    return list(db.scalars(select(Bill).where(
+        Bill.owner_id == require_owner_id(owner_id)
+    ).order_by(Bill.due_date, Bill.name)))
 
 
-def get_bill(db: Session, bill_id: int) -> Bill | None:
-    return db.get(Bill, bill_id)
+def get_bill(db: Session, bill_id: int, owner_id: str) -> Bill | None:
+    return db.scalar(select(Bill).where(
+        Bill.id == bill_id, Bill.owner_id == require_owner_id(owner_id)
+    ))
 
 
 def update_bill(db: Session, bill: Bill, data: BillUpdate) -> Bill:
@@ -114,8 +120,9 @@ def to_bill_read(bill: Bill) -> BillRead:
 # Debts
 # ---------------------------------------------------------------------------
 
-def create_debt(db: Session, data: DebtCreate) -> Debt:
+def create_debt(db: Session, data: DebtCreate, owner_id: str) -> Debt:
     debt = Debt(
+        owner_id=require_owner_id(owner_id),
         name=data.name,
         debt_type=data.debt_type,
         balance_cents=dollars_to_cents(data.balance),
@@ -130,12 +137,16 @@ def create_debt(db: Session, data: DebtCreate) -> Debt:
     return debt
 
 
-def list_debts(db: Session) -> list[Debt]:
-    return list(db.scalars(select(Debt).order_by(Debt.balance_cents.desc(), Debt.name)))
+def list_debts(db: Session, owner_id: str) -> list[Debt]:
+    return list(db.scalars(select(Debt).where(
+        Debt.owner_id == require_owner_id(owner_id)
+    ).order_by(Debt.balance_cents.desc(), Debt.name)))
 
 
-def get_debt(db: Session, debt_id: int) -> Debt | None:
-    return db.get(Debt, debt_id)
+def get_debt(db: Session, debt_id: int, owner_id: str) -> Debt | None:
+    return db.scalar(select(Debt).where(
+        Debt.id == debt_id, Debt.owner_id == require_owner_id(owner_id)
+    ))
 
 
 def update_debt(db: Session, debt: Debt, data: DebtUpdate) -> Debt:
@@ -178,8 +189,9 @@ def to_debt_read(debt: Debt) -> DebtRead:
 # Investments (temporary starting-position model)
 # ---------------------------------------------------------------------------
 
-def create_investment(db: Session, data: InvestmentCreate) -> Investment:
+def create_investment(db: Session, data: InvestmentCreate, owner_id: str) -> Investment:
     investment = Investment(
+        owner_id=require_owner_id(owner_id),
         name=data.name,
         ticker=data.ticker.upper() if data.ticker else None,
         quantity_units=quantity_to_units(data.quantity),
@@ -193,12 +205,17 @@ def create_investment(db: Session, data: InvestmentCreate) -> Investment:
     return investment
 
 
-def list_investments(db: Session) -> list[Investment]:
-    return list(db.scalars(select(Investment).order_by(Investment.name)))
+def list_investments(db: Session, owner_id: str) -> list[Investment]:
+    return list(db.scalars(select(Investment).where(
+        Investment.owner_id == require_owner_id(owner_id)
+    ).order_by(Investment.name)))
 
 
-def get_investment(db: Session, investment_id: int) -> Investment | None:
-    return db.get(Investment, investment_id)
+def get_investment(db: Session, investment_id: int, owner_id: str) -> Investment | None:
+    return db.scalar(select(Investment).where(
+        Investment.id == investment_id,
+        Investment.owner_id == require_owner_id(owner_id)
+    ))
 
 
 def update_investment(
@@ -277,10 +294,10 @@ def normalized_monthly_bill_total_cents(bills: Iterable[Bill]) -> int:
 # Summary and options
 # ---------------------------------------------------------------------------
 
-def get_finance_summary(db: Session) -> FinanceSummary:
-    bills = list_bills(db)
-    debts = list_debts(db)
-    investments = list_investments(db)
+def get_finance_summary(db: Session, owner_id: str) -> FinanceSummary:
+    bills = list_bills(db, owner_id)
+    debts = list_debts(db, owner_id)
+    investments = list_investments(db, owner_id)
 
     return FinanceSummary(
         bill_count=sum(1 for bill in bills if is_active(bill)),

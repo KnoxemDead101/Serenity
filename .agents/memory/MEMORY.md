@@ -1,7 +1,10 @@
-- [Private GitHub source](github-source.md) — sync through the authenticated integration; SHA-based tree updates and blob verification avoid proxy truncation.
+- [GitHub source sync](github-source.md) — use the authenticated integration; verify visibility and blob IDs, and use SHA-based tree updates to avoid proxy truncation.
 - [Artifact manifest updates](replit-artifact-metadata.md) — Replit-managed artifact manifests require validated replacement, and service commands run from artifact directories.
 - [Python dependency setup](python-publish-dependencies.md) — Replit manages requirements; avoid explicit pip in publish builds and post-merge setup.
 - [Browser validation workflow](browser-validation-workflow.md) — keep Chromium checks in named validation, not the normal app Run button.
 - [Legacy SQLite and Alembic](legacy-sqlite-alembic.md) — pre-migration SQLite files can block Alembic; inspect and preserve data before initializing a new database.
 - [SQLite UTC timestamps](sqlite-utc-timestamps.md) — SQLite drops timezone metadata on ORM reads; treat its naive persisted timestamps as UTC at API boundaries.
 - [Clerk vanilla JS UI](clerk-vanilla-js-ui.md) — plain HTML must load the matching Clerk UI bundle before mounting prebuilt sign-in components.
+- [Clerk backend request filtering](clerk-backend-requests.md) — Python's default User-Agent can receive a non-JSON 403 despite valid credentials.
+- [Financial record ownership](financial-record-ownership.md) — authenticated Clerk user IDs scope every record, summary, correction, and export; legacy backfills require an explicit owner.
+- [Clerk token trust](clerk-token-trust.md) — session lookup is not token proof; issuer and browser-origin trust must stay independent of caller input.

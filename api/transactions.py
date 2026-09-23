@@ -8,6 +8,7 @@ the existing response models without changing payload or URL semantics.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from auth import require_session
 from models.account import Account
 from schemas.transaction import TransactionCorrectionRead, TransactionCreate, TransactionRead, TransactionUpdate
 from services import (
@@ -21,16 +22,18 @@ from utils.choices import (
 router = APIRouter(prefix="/serenity-api", tags=["Transactions"])
 
 
-def _require_account(db: Session, account_id: int) -> Account:
+def _require_account(db: Session, account_id: int, owner_id: str) -> Account:
     """Shared 404 check used by every account-scoped route."""
-    account = account_service.get_account(db, account_id)
+    account = account_service.get_account(db, account_id, owner_id)
     if account is None:
         raise HTTPException(status_code=404, detail="Account not found")
     return account
 
 
 @router.get("/transactions/options")
-def get_transaction_options(db: Session = Depends(get_db)):
+def get_transaction_options(
+    user_id: str = Depends(require_session), db: Session = Depends(get_db)
+):
     return {
         "transaction_types": TRANSACTION_TYPES,
         "classifications": ACCOUNT_CLASSIFICATIONS,
@@ -38,21 +41,30 @@ def get_transaction_options(db: Session = Depends(get_db)):
         "dependent_categories": DEPENDENT_CATEGORIES,
         "businesses": [
             {"id": x.id, "name": x.name}
-            for x in business_service.list_businesses(db, active_only=True)
+            for x in business_service.list_businesses(
+                db, active_only=True, owner_id=user_id
+            )
         ],
         "dependents": [
             {"id": x.id, "display_name": x.display_name}
-            for x in dependent_service.list_dependents(db, active_only=True)
+            for x in dependent_service.list_dependents(
+                db, active_only=True, owner_id=user_id
+            )
         ],
     }
 
 
 @router.post("/accounts/{account_id}/transactions", response_model=TransactionRead,
              status_code=status.HTTP_201_CREATED)
-def create_transaction(account_id: int, data: TransactionCreate, db: Session = Depends(get_db)):
+def create_transaction(
+    account_id: int,
+    data: TransactionCreate,
+    user_id: str = Depends(require_session),
+    db: Session = Depends(get_db),
+):
     try:
         transaction = transaction_service.create_transaction(
-            db, _require_account(db, account_id), data
+            db, _require_account(db, account_id, user_id), data
         )
     except transaction_service.TransactionRuleError as error:
         raise HTTPException(status_code=422, detail=str(error))
@@ -60,26 +72,37 @@ def create_transaction(account_id: int, data: TransactionCreate, db: Session = D
 
 
 @router.get("/accounts/{account_id}/transactions", response_model=list[TransactionRead])
-def list_transactions(account_id: int, db: Session = Depends(get_db)):
+def list_transactions(
+    account_id: int,
+    user_id: str = Depends(require_session),
+    db: Session = Depends(get_db),
+):
     """Return active transactions newest first for one account."""
-    _require_account(db, account_id)
+    _require_account(db, account_id, user_id)
     return [transaction_service.to_transaction_read(t)
-            for t in transaction_service.list_transactions(db, account_id)]
+            for t in transaction_service.list_transactions(db, account_id, user_id)]
 
 
 @router.get("/accounts/{account_id}/transaction-corrections",
              response_model=list[TransactionCorrectionRead])
-def list_transaction_corrections(account_id: int, db: Session = Depends(get_db)):
+def list_transaction_corrections(
+    account_id: int,
+    user_id: str = Depends(require_session),
+    db: Session = Depends(get_db),
+):
     """Return immutable edit/delete history for one account."""
-    _require_account(db, account_id)
+    _require_account(db, account_id, user_id)
     return [transaction_service.to_correction_read(c)
-            for c in transaction_service.list_corrections(db, account_id)]
+            for c in transaction_service.list_corrections(db, account_id, user_id)]
 
 
 @router.put("/accounts/{account_id}/transactions/{transaction_id}", response_model=TransactionRead)
 def update_transaction(account_id: int, transaction_id: int, data: TransactionUpdate,
+                       user_id: str = Depends(require_session),
                        db: Session = Depends(get_db)):
-    transaction = transaction_service.get_transaction(db, account_id, transaction_id)
+    transaction = transaction_service.get_transaction(
+        db, account_id, transaction_id, user_id
+    )
     if transaction is None:
         raise HTTPException(status_code=404, detail="Transaction not found")
     try:
@@ -91,8 +114,15 @@ def update_transaction(account_id: int, transaction_id: int, data: TransactionUp
 
 @router.delete("/accounts/{account_id}/transactions/{transaction_id}",
                status_code=status.HTTP_204_NO_CONTENT)
-def delete_transaction(account_id: int, transaction_id: int, db: Session = Depends(get_db)):
-    transaction = transaction_service.get_transaction(db, account_id, transaction_id)
+def delete_transaction(
+    account_id: int,
+    transaction_id: int,
+    user_id: str = Depends(require_session),
+    db: Session = Depends(get_db),
+):
+    transaction = transaction_service.get_transaction(
+        db, account_id, transaction_id, user_id
+    )
     if transaction is None:
         raise HTTPException(status_code=404, detail="Transaction not found")
     transaction_service.delete_transaction(db, transaction)

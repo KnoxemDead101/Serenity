@@ -28,9 +28,10 @@ when displaying. `utc_now()` below is the one place "now" comes from.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from services.ownership import OWNER_ID_MAX_LENGTH
 from storage.database import Base
 
 
@@ -41,8 +42,10 @@ def utc_now() -> datetime:
 
 class Account(Base):
     __tablename__ = "accounts"
+    __table_args__ = (Index("ix_accounts_owner_id", "owner_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String(OWNER_ID_MAX_LENGTH), nullable=False)
     name: Mapped[str] = mapped_column(String(100))
     account_type: Mapped[str] = mapped_column(String(50))
     classification: Mapped[str] = mapped_column(String(50))

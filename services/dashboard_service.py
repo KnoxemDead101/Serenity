@@ -37,13 +37,13 @@ def calculate_net_worth_cents(
     return account_balance_cents + investment_value_cents - debt_balance_cents
 
 
-def get_dashboard_summary(db: Session) -> DashboardSummary:
+def get_dashboard_summary(db: Session, owner_id: str) -> DashboardSummary:
     """Combine independent account and finance summaries for the dashboard."""
-    accounts = account_service.list_accounts(db)
-    account_totals = account_service.get_account_totals(db)
-    debts = finance_service.list_debts(db)
-    investments = finance_service.list_investments(db)
-    finance = finance_service.get_finance_summary(db)
+    accounts = account_service.list_accounts(db, owner_id)
+    account_totals = account_service.get_account_totals(db, owner_id)
+    debts = finance_service.list_debts(db, owner_id)
+    investments = finance_service.list_investments(db, owner_id)
+    finance = finance_service.get_finance_summary(db, owner_id)
     return DashboardSummary(
         account_count=account_totals.account_count,
         total_balance=account_totals.total_balance,

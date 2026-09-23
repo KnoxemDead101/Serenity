@@ -1,36 +1,29 @@
 """Authentication helpers for the Serenity web application.
 
-Clerk handles sign-in and invitation management.  Serenity exchanges a
-verified Clerk session token for a short-lived, signed HTTP-only cookie so
-that Python page and API routes can enforce authentication server-side.
+Clerk handles sign-in and invitation management. Serenity exchanges a
+verified Clerk session token for a signed HTTP-only cookie bound to that
+Clerk session. Protected requests recheck Clerk for revocation.
 """
 
 import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
+import re
 import time
 import urllib.error
 import urllib.request
 from typing import Any
+from functools import lru_cache
+
+import jwt
 
 from fastapi import HTTPException, Request, status
 
 AUTH_COOKIE = "serenity_session"
 SESSION_TTL_SECONDS = 60 * 60 * 12
-
-
-def _auth_bypass_enabled() -> bool:
-    """Allow the existing isolated test suite to exercise business routes."""
-    return bool(getattr(request_app_state(), "auth_bypass", False))
-
-
-def request_app_state():
-    """Return the app state set by the test harness, when present."""
-    from main import app
-
-    return app.state
 
 
 def _secret() -> bytes:
@@ -60,31 +53,46 @@ def _decode(value: str) -> dict[str, Any] | None:
         session = json.loads(decoded)
         if not isinstance(session, dict) or session.get("expires_at", 0) < time.time():
             return None
-        if not session.get("user_id"):
+        if not isinstance(session.get("user_id"), str) or not session["user_id"]:
+            return None
+        if not isinstance(session.get("clerk_session_id"), str) or not re.fullmatch(
+            r"[A-Za-z0-9_-]+", session["clerk_session_id"]
+        ):
             return None
         return session
     except (ValueError, TypeError, json.JSONDecodeError):
         return None
 
 
-def issue_session(user_id: str) -> str:
+def issue_session(user_id: str, clerk_session_id: str) -> str:
+    if not isinstance(clerk_session_id, str) or not re.fullmatch(
+        r"[A-Za-z0-9_-]+", clerk_session_id
+    ):
+        raise ValueError("Valid Clerk session id required")
     return _encode(
         {
             "user_id": user_id,
+            "clerk_session_id": clerk_session_id,
             "expires_at": int(time.time()) + SESSION_TTL_SECONDS,
         }
     )
 
 
 def current_user(request: Request) -> str | None:
-    """Return the authenticated Clerk user id from Serenity's signed cookie."""
-    if _auth_bypass_enabled():
-        return "test-user"
+    """Return owner only while the bound Clerk session remains active."""
+    if hasattr(request.state, "serenity_current_user"):
+        return request.state.serenity_current_user
     cookie = request.cookies.get(AUTH_COOKIE)
     if not cookie:
         return None
     session = _decode(cookie)
-    return str(session["user_id"]) if session else None
+    user_id = (
+        session["user_id"]
+        if session and _live_clerk_session(session["clerk_session_id"], session["user_id"])
+        else None
+    )
+    request.state.serenity_current_user = user_id
+    return user_id
 
 
 def require_session(request: Request) -> str:
@@ -111,43 +119,108 @@ def require_page_session(request: Request) -> str:
     return user_id
 
 
-def _jwt_payload(token: str) -> dict[str, Any] | None:
-    """Read the signed token claims; Clerk performs the authoritative check."""
+def _clerk_issuer() -> str:
+    """Derive trust from server configuration, never from incoming JWT claims."""
+    key = os.getenv("CLERK_PUBLISHABLE_KEY", "")
+    if not key.startswith(("pk_test_", "pk_live_")):
+        raise ValueError("Missing Clerk configuration")
+    encoded = key.split("_", 2)[2]
+    host = base64.b64decode(encoded + "=" * (-len(encoded) % 4), validate=True).decode()
+    if not host.endswith("$"):
+        raise ValueError("Invalid Clerk configuration")
+    host = host[:-1]
+    if not re.fullmatch(r"[a-zA-Z0-9]+(?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?", host):
+        raise ValueError("Invalid Clerk host")
+    return f"https://{host}"
+
+
+@lru_cache(maxsize=4)
+def _jwks_client(issuer: str) -> jwt.PyJWKClient:
+    # Bounded cache; PyJWT refreshes on an unknown kid to support key rotation.
+    return jwt.PyJWKClient(
+        f"{issuer}/.well-known/jwks.json",
+        lifespan=300,
+        timeout=8,
+        headers={"User-Agent": "Serenity/1.0", "Accept": "application/json"},
+    )
+
+
+def _authorized_parties() -> set[str]:
+    """Production origins are explicit; dev origins come from Replit config."""
+    parties = {
+        origin.strip() for origin in
+        os.getenv("SERENITY_AUTHORIZED_PARTIES", "").split(",") if origin.strip()
+    }
+    if os.getenv("SERENITY_DEV") == "1":
+        parties.update(
+            f"https://{host.strip()}" for host in
+            os.getenv("REPLIT_DOMAINS", "").split(",") if host.strip()
+        )
+        domain = os.getenv("REPLIT_DEV_DOMAIN")
+        if domain:
+            parties.add(f"https://{domain}")
+    return parties
+
+
+def verify_clerk_token(token: str) -> tuple[str, str] | None:
+    """Verify RS256 signature and claims before checking live session status."""
     try:
-        parts = token.split(".")
-        if len(parts) != 3:
+        issuer = _clerk_issuer()
+        header = jwt.get_unverified_header(token)
+        if header.get("alg") != "RS256" or not isinstance(header.get("kid"), str):
             return None
-        payload = base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4))
-        claims = json.loads(payload)
-        return claims if isinstance(claims, dict) else None
-    except (ValueError, TypeError, json.JSONDecodeError):
+        key = _jwks_client(issuer).get_signing_key_from_jwt(token)
+        claims = jwt.decode(
+            token, key.key, algorithms=["RS256"], issuer=issuer,
+            options={"require": ["iss", "exp", "nbf", "iat", "sub", "sid"]},
+        )
+        for field in ("exp", "nbf", "iat"):
+            if type(claims[field]) is not int:
+                return None
+        for field in ("sub", "sid"):
+            if not isinstance(claims[field], str) or not re.fullmatch(
+                r"[A-Za-z0-9_-]+", claims[field]
+            ):
+                return None
+        # This is a browser-only exchange: require azp, including when the
+        # caller omits Origin. Never build the allowlist from request headers.
+        if not isinstance(claims.get("azp"), str) or claims["azp"] not in _authorized_parties():
+            return None
+    except (jwt.PyJWTError, ValueError, TypeError, OSError):
         return None
 
-
-def verify_clerk_token(token: str) -> str | None:
-    """Verify a Clerk session through Clerk's Backend API and return user id."""
-    claims = _jwt_payload(token)
-    if not claims or not claims.get("sid") or not claims.get("sub"):
+    if not _live_clerk_session(claims["sid"], claims["sub"]):
         return None
-    if claims.get("exp", 0) < time.time():
-        return None
+    return claims["sub"], claims["sid"]
 
+
+def _live_clerk_session(session_id: str, user_id: str) -> bool:
+    """Fail closed on network errors, revoked sessions, or owner mismatch."""
     secret = os.getenv("CLERK_SECRET_KEY")
     if not secret:
-        return None
+        return False
     request = urllib.request.Request(
-        f"https://api.clerk.com/v1/sessions/{claims['sid']}",
-        headers={"Authorization": f"Bearer {secret}"},
+        f"https://api.clerk.com/v1/sessions/{session_id}",
+        headers={
+            "Authorization": f"Bearer {secret}",
+            "User-Agent": "Serenity/1.0",
+            "Accept": "application/json",
+        },
     )
     try:
         with urllib.request.urlopen(request, timeout=8) as response:
             session = json.loads(response.read())
-    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, ValueError):
-        return None
+    except urllib.error.HTTPError as error:
+        logging.getLogger(__name__).warning(
+            "Clerk session lookup failed with HTTP %s", error.code
+        )
+        return False
+    except (urllib.error.URLError, TimeoutError, ValueError):
+        logging.getLogger(__name__).warning("Clerk session lookup unavailable")
+        return False
 
-    if session.get("status") != "active" or session.get("user_id") != claims.get("sub"):
-        return None
-    return str(claims["sub"])
+    return (isinstance(session, dict) and session.get("status") == "active"
+            and session.get("user_id") == user_id)
 
 
 def bearer_token(request: Request) -> str | None:

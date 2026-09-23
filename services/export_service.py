@@ -13,9 +13,11 @@ from models.bill import Bill
 from models.business import Business
 from models.debt import Debt
 from models.dependent import Dependent
+from models.income_profile import IncomeProfile
 from models.investment import Investment
 from models.transaction import Transaction
 from models.transaction_correction import TransactionCorrection
+from services.ownership import require_owner_id
 from utils.money import cents_to_dollars, milli_to_percent, units_to_quantity
 
 EXPORT_FORMAT_VERSION = 1
@@ -42,13 +44,17 @@ def get_schema_version(db: Session) -> str | None:
         return None
 
 
-def _all(db: Session, model) -> list:
-    return list(db.scalars(select(model).order_by(model.id)))
+def _all(db: Session, model, owner_id: str) -> list:
+    owner_id = require_owner_id(owner_id)
+    return list(db.scalars(select(model).where(
+        model.owner_id == owner_id
+    ).order_by(model.id)))
 
 
-def build_export(db: Session) -> dict:
+def build_export(db: Session, owner_id: str) -> dict:
     """Return every row, including inactive and soft-deleted history."""
-    accounts = _all(db, Account)
+    owner_id = require_owner_id(owner_id)
+    accounts = _all(db, Account, owner_id)
     return {
         "format": "serenity-backup",
         "format_version": EXPORT_FORMAT_VERSION,
@@ -75,7 +81,7 @@ def build_export(db: Session) -> dict:
                 "created_at": _iso(b.created_at),
                 "updated_at": _iso(b.updated_at),
             }
-            for b in _all(db, Business)
+            for b in _all(db, Business, owner_id)
         ],
         "dependents": [
             {
@@ -86,7 +92,7 @@ def build_export(db: Session) -> dict:
                 "created_at": _iso(d.created_at),
                 "updated_at": _iso(d.updated_at),
             }
-            for d in _all(db, Dependent)
+            for d in _all(db, Dependent, owner_id)
         ],
         "transactions": [
             {
@@ -102,7 +108,7 @@ def build_export(db: Session) -> dict:
                  "business_id": getattr(t, "business_id", None),
                  "dependent_id": getattr(t, "dependent_id", None),
             }
-            for t in _all(db, Transaction)
+            for t in _all(db, Transaction, owner_id)
         ],
         "transaction_corrections": [
             {
@@ -111,7 +117,7 @@ def build_export(db: Session) -> dict:
                 "changed_at": _iso(c.changed_at), "before": c.before,
                 "after": c.after,
             }
-            for c in _all(db, TransactionCorrection)
+            for c in _all(db, TransactionCorrection, owner_id)
         ],
         "bills": [
             {
@@ -121,7 +127,7 @@ def build_export(db: Session) -> dict:
                 "notes": b.notes, "active": _active(b),
                 "created_at": _iso(b.created_at), "updated_at": _iso(b.updated_at),
             }
-            for b in _all(db, Bill)
+            for b in _all(db, Bill, owner_id)
         ],
         "debts": [
             {
@@ -136,7 +142,7 @@ def build_export(db: Session) -> dict:
                 "active": _active(d), "created_at": _iso(d.created_at),
                 "updated_at": _iso(d.updated_at),
             }
-            for d in _all(db, Debt)
+            for d in _all(db, Debt, owner_id)
         ],
         "investments": [
             {
@@ -150,7 +156,27 @@ def build_export(db: Session) -> dict:
                 "notes": i.notes, "active": _active(i),
                 "created_at": _iso(i.created_at), "updated_at": _iso(i.updated_at),
             }
-            for i in _all(db, Investment)
+            for i in _all(db, Investment, owner_id)
+        ],
+        "income_profiles": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "income_type": p.income_type,
+                "classification": p.classification,
+                "pay_frequency": p.pay_frequency,
+                "hourly_rate_cents": p.hourly_rate_cents,
+                "standard_hours_hundredths": p.standard_hours_hundredths,
+                "expected_hours_hundredths": p.expected_hours_hundredths,
+                "annual_salary_cents": p.annual_salary_cents,
+                "amount_per_period_cents": p.amount_per_period_cents,
+                "expected_net_per_period_cents": p.expected_net_per_period_cents,
+                "notes": p.notes,
+                "active": p.active,
+                "created_at": _iso(p.created_at),
+                "updated_at": _iso(p.updated_at),
+            }
+            for p in _all(db, IncomeProfile, owner_id)
         ],
     }
 
@@ -170,12 +196,14 @@ def _csv_cell(value) -> str:
     return text_value
 
 
-def build_transactions_csv(db: Session) -> str:
-    account_names = {a.id: a.name for a in _all(db, Account)}
+def build_transactions_csv(
+    db: Session, owner_id: str
+) -> str:
+    account_names = {a.id: a.name for a in _all(db, Account, owner_id)}
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(TRANSACTION_CSV_COLUMNS)
-    for t in _all(db, Transaction):
+    for t in _all(db, Transaction, owner_id):
         writer.writerow([
             t.id, _iso(t.date), _csv_cell(account_names.get(t.account_id, "")),
             _csv_cell(t.transaction_type), _csv_cell(t.classification),

@@ -3,16 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0a0a">
   <title>Serenity · Accounts</title>
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
   <header class="topbar">
     <span class="brand">Serenity</span>
-    <nav>
+    <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="site-nav">Menu</button>
+    <nav id="site-nav" class="site-nav" aria-label="Main">
       <a href="/">Dashboard</a>
-      <a href="/accounts" class="active">Accounts</a>
+      <a href="/accounts" class="active" aria-current="page">Accounts</a>
       <a href="/finances">Finances</a>
+      <a href="/income">Income</a>
       <a href="/setup">Setup</a>
       <a href="/sign-out" class="sign-out">Sign out</a>
     </nav>
@@ -55,7 +58,7 @@
       <h2>Your accounts</h2>
       <p class="muted">Deactivated accounts stay in your history and still count toward your balance and net worth, but can't receive new transactions.</p>
       <div class="table-wrap">
-        <table>
+        <table class="transactions-table">
           <thead>
             <tr>
               <th>Name</th>

@@ -58,3 +58,13 @@ DEBT_TYPES = [
     "Medical",
     "Other",
 ]
+
+INCOME_TYPES = ["Hourly", "Salary", "Recurring", "Variable", "Other"]
+PAY_PERIODS_PER_YEAR = {
+    "Weekly": 52,
+    "Biweekly": 26,
+    "Semimonthly": 24,
+    "Monthly": 12,
+    "Annual": 1,
+}
+PAY_FREQUENCIES = list(PAY_PERIODS_PER_YEAR)
