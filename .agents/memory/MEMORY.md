@@ -1,4 +1,4 @@
-- [Private GitHub source](github-source.md) — use the authenticated GitHub integration for future Serenity source syncs.
+- [Private GitHub source](github-source.md) — sync through the authenticated integration; SHA-based tree updates and blob verification avoid proxy truncation.
 - [Artifact manifest updates](replit-artifact-metadata.md) — Replit-managed artifact manifests require validated replacement, and service commands run from artifact directories.
 - [Python dependency setup](python-publish-dependencies.md) — Replit manages requirements; avoid explicit pip in publish builds and post-merge setup.
 - [Browser validation workflow](browser-validation-workflow.md) — keep Chromium checks in named validation, not the normal app Run button.
