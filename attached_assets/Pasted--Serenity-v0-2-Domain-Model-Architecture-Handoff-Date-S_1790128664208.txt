@@ -1,0 +1,492 @@
+# Serenity v0.2 — Domain Model & Architecture Handoff
+
+Date: September 22, 2026
+Project: Serenity
+Purpose of this document: Define the next-stage domain architecture and product direction before additional implementation.
+
+This document extends the existing serenity_v0_1_handoff.md. It does not replace the existing stabilization plan or authorize implementation of every model described below.
+
+---
+
+## 1. Project Identity
+
+Serenity is a personal financial intelligence and modeling application being built specifically around Leighton's financial system first.
+
+It is both:
+1. A real personal finance application.
+2. A software-engineering learning project.
+
+The application may eventually be generalized and packaged as a product after extensive personal testing.
+
+Serenity is not intended to be merely an expense tracker or bookkeeping application. Its larger purpose is to model: personal finances, recurring obligations, major expenses, dependents, businesses, savings, long-term investments, retirement assets, dividends, active trading, debt, cash flow, net worth, projections, and financial scenarios.
+
+Serenity may eventually provide structured financial intelligence to Brainiac, a separate broader decision-intelligence system.
+
+---
+
+## 2. Current Technology
+
+Current stack: Python 3.11, FastAPI, SQLAlchemy, Pydantic, SQLite for local development/testing, PostgreSQL planned for persistent Replit deployment, HTML, CSS, JavaScript, pytest, Git/GitHub.
+
+Current architectural flow:
+
+```
+frontend/ → api/ → schemas/ → services/ → models/ → storage/database.py
+```
+
+Supporting areas: utils/, tests/, docs/
+
+The existing architecture should remain understandable and modular. Do not perform major architectural rewrites without explaining and receiving approval first.
+
+---
+
+## 3. Existing Important Rules
+
+**Money.** Money is stored as integer cents wherever practical. Do not use floating-point arithmetic for monetary values. API representations may use formatted strings where appropriate. Amounts containing more than two decimal places should be rejected rather than silently rounded.
+
+**Account balances.** An account's current balance should generally be calculated, not independently stored as mutable state: opening balance + incoming activity − outgoing activity = current balance. This prevents stored balances from drifting away from transaction history.
+
+**Transactions.** Transaction amounts should be positive. Direction is determined by transaction type: income, expense, transfer. Transfers are still deferred until the transaction system is ready to support them correctly.
+
+**Source control.** GitHub remains the authoritative source of truth. AI tools and Replit are contributors/development environments, not owners of the codebase.
+
+---
+
+## 4. Product Philosophy
+
+Serenity should be optimized around financially meaningful data, not exhaustive bookkeeping. The user should not need to record every coffee, snack, or small purchase for Serenity to be useful.
+
+Primary tracking should emphasize: recurring obligations, subscriptions, rent/housing, insurance, tuition/education, debt payments, major purchases, business expenses, child/dependent expenses, savings, investments, retirement, and trading.
+
+Variable spending such as food, groceries, fuel, shopping, and entertainment may optionally be entered when the user wants better estimates. Serenity may eventually calculate historical averages from those samples:
+
+```
+Observed food spending → Historical monthly average → User-defined planned budget → Financial projection
+```
+
+Historical averages and manually selected budgets are different concepts and should remain distinguishable.
+
+---
+
+## 5. Major Conceptual Systems
+
+```
+SERENITY
+├── Personal Financial System
+├── Portfolio / Profit Engine
+└── Financial Modeling Engine
+```
+
+These systems interact but should not become one giant tightly coupled module.
+
+---
+
+## 6. Account Domain
+
+An Account represents a financial container. It does not store banking credentials.
+
+Proposed fields: id, name, account_type, classification, institution (optional), opening_balance, description (optional), active, created_at, updated_at.
+
+Potential account types: checking, savings, cash, credit_card, brokerage, retirement, trading, other.
+Potential classifications: personal, business, investment, trading.
+
+Examples: Main Checking (checking, personal); KTT Checking (checking, business); Roth IRA (retirement, investment).
+
+Institution should remain optional (e.g. Desert Financial, Fidelity, Robinhood, None).
+
+Serenity does not currently need routing numbers, full account numbers, bank usernames, bank passwords, or brokerage credentials. If bank connectivity is ever implemented, it should use proper external APIs and security architecture.
+
+---
+
+## 7. Business Entity
+
+Business should remain a lightweight entity. The application currently needs to support KTT, but the architecture should not assume there can only ever be one business.
+
+Fields: id, name, description (optional), active, created_at, updated_at.
+
+Accounts and transactions may optionally reference business_id. Do NOT turn this into an accounting/ERP subsystem. The immediate purpose is simply to distinguish financial activity associated with a business.
+
+---
+
+## 8. Transaction Domain
+
+Transaction will become one of the most important entities in Serenity. It represents financially meaningful money entering or leaving an account.
+
+Fields: id, account_id, transaction_type, classification, amount, transaction_date, transaction_time (optional), merchant (optional), location (optional), category, subcategory (optional), description, payment_method (optional), business_id (optional), receipt_id (optional), notes (optional), created_at, updated_at.
+
+Transaction types: income, expense, transfer. Transfers are a future implementation concern and should not be implemented casually.
+
+Classifications: personal, business, investment, trading.
+
+Potential categories: Housing, Insurance, Education, Subscriptions, Utilities, Transportation, Car Maintenance, Children, Groceries, Food, Business Equipment, Business Software, Inventory, Shipping, Investment Contribution, Dividend, Trading Expense, Other.
+
+Categories should eventually be extensible rather than permanently hardcoded.
+
+---
+
+## 9. Transaction Descriptions
+
+Descriptions are important because Serenity is intended to preserve the reason money was spent, not merely the merchant. For financially significant transactions (business expenses, major purchases, child expenses, unusual expenses) the description should explain the purpose.
+
+Example: Merchant: Newegg · Classification: Business · Category: Equipment · Description: Replacement SSD for development workstation.
+
+Do not design Serenity around requiring detailed records for every trivial purchase.
+
+---
+
+## 10. Dependents / Children
+
+Children should be tracked separately. Create a lightweight Dependent concept rather than hardcoding child names into transactions.
+
+Fields: id, display_name, relationship, active, notes (optional), created_at.
+
+Do not store unnecessary sensitive identifying information. No Social Security numbers or similar information is required.
+
+Expenses should be capable of being associated with Child 1, Child 2, both/shared, or no dependent.
+
+Potential child expense categories: Food, Clothing, Medical, Supplies, Childcare, Education, Activities, Other.
+
+Long-term goal: calculate actual child expenses, projected child expenses, average monthly child expenses, user-defined child budget, combined dependent costs. The children are currently young and many costs will overlap, but they should remain separately identifiable in the data model.
+
+---
+
+## 11. Bills vs Transactions
+
+A Bill represents an obligation. A Transaction represents what actually occurred. "Car Payment Bill, $542 due monthly" is not the same record as "Transaction, $542 paid from checking." Eventually Serenity should be able to associate or match them. Do not double-count a Bill and its resulting Transaction as two separate expenses in analytics.
+
+---
+
+## 12. Debt vs Transactions
+
+Debt represents the liability. A debt payment represents actual financial activity. Eventually: Debt → Payment → Transaction. Analytics must avoid double-counting.
+
+---
+
+## 13. Portfolio / Profit Engine
+
+Portfolio is broader than a traditional stock portfolio. It represents the user's long-term capital-building system, referred to conceptually as the Profit Engine.
+
+It may contain: savings, high-yield savings, stocks, ETFs, bonds, retirement accounts, Roth accounts, dividend assets, investment cash, trading capital, other growth assets.
+
+Operational cash and Profit Engine cash should remain distinguishable:
+
+```
+Cash
+├── Operational: Checking, Spending cash, Business operating cash
+└── Profit Engine: Emergency savings, Long-term savings, High-yield savings, Investment cash
+```
+
+Both may contribute to net worth. Only intentionally designated growth/savings capital should contribute to Profit Engine analytics.
+
+---
+
+## 14. Portfolio
+
+Portfolio represents a logical grouping of wealth-building capital rather than assuming everything is a stock brokerage account.
+
+Fields: id, name, description, active, created_at, updated_at.
+
+Example: Long-Term Profit Engine → Brokerage, Roth IRA, Long-Term Savings, Bonds, Dividend Holdings.
+
+Do not assume every portfolio component has a ticker, shares, or a live market price.
+
+---
+
+## 15. Holdings
+
+A Holding represents an owned investment asset.
+
+Fields: id, account_id, symbol (optional), name, asset_type, quantity, current_price, price_updated_at, notes (optional), created_at, updated_at.
+
+Asset types: stock, ETF, bond, fund, cash, other. Cryptocurrency may be added later.
+
+Serenity should eventually calculate: cost basis, average cost, market value, unrealized P&L, percentage return, portfolio weight. Store financial facts and calculate derived results.
+
+---
+
+## 16. Investment Purchase History
+
+The preferred long-term design is to record investment activity rather than repeatedly editing a holding's average cost manually.
+
+InvestmentTransaction fields: id, account_id, holding_id, transaction_type, quantity, price_per_unit, fees, transaction_date, notes, created_at.
+
+Types: buy, sell, dividend, interest, contribution, withdrawal.
+
+Example: BUY 10 shares @ $180; BUY 5 shares @ $210. Serenity should derive current quantity, average cost and cost basis rather than requiring manual recalculation.
+
+For investments owned before Serenity begins tracking them, support a Starting Position concept (e.g. AAPL, Quantity 15, Average Cost $192, As-of 09/22/2026). Subsequent activity can then be tracked normally.
+
+---
+
+## 17. Current Market Prices
+
+Live market integration is not required yet. Initially, current asset prices may be entered manually. The architecture should make the price source replaceable later:
+
+```
+Market Data Provider → Current Price → Portfolio Service → Market Value / P&L / Allocation
+```
+
+Historical purchase price and current market price are fundamentally different values. Updating the current market price must never overwrite cost basis.
+
+---
+
+## 18. Trading Definition
+
+A Trade represents short-term active trading intended to generate liquidity or trading profit: futures day trading, prop-firm trading, options trading, short-term stock trading, same-day or near-term speculative positions.
+
+Long-term investment purchases are not Trades. They belong to the investment/holding system. This distinction is critical.
+
+---
+
+## 19. Trade Model
+
+Fields: id, trading_account_id, symbol, instrument_type, direction, entry_datetime, exit_datetime, entry_price, exit_price, quantity, stop_loss (optional), target (optional), fees, risk_amount (optional), strategy (optional), setup (optional), entry_reason, exit_reason (optional), notes (optional), followed_plan (optional), screenshot_path (optional), intended_use (optional), created_at, updated_at.
+
+Instruments: futures, options, stock, other. Direction: long, short.
+
+Derived values: gross P&L, net P&L, holding duration, win/loss/breakeven, risk/reward, R multiple. Do not store values that can reliably be calculated from authoritative trade data unless there is a clear reason.
+
+---
+
+## 20. Trading P&L Rule (critical)
+
+Trade P&L remains inside the trading account. A trade closing at +$250 means the trading account generated $250 of P&L. It does NOT automatically mean +$250 personal income, +$250 long-term investment contribution, or +$250 available spending money. The money remains trading capital until an actual withdrawal, payout, or transfer occurs.
+
+A Trade may contain an optional intended_use for journaling purposes, but intention must not change financial accounting.
+
+---
+
+## 21. Trade vs Financial Transaction
+
+An NQ trade of +$250 is a Trade. Withdrawing $200 from the trading account to checking is financial account activity (a transfer). Spending $80 of it on groceries is an Expense Transaction. Serenity should eventually understand this capital flow without pretending these are all the same event.
+
+---
+
+## 22. Personally Funded Trading Accounts
+
+These contain the user's own capital and therefore affect assets, net worth, available capital, and Profit Engine allocation. They track deposited capital, account equity, trades, P&L, deposits, withdrawals. This account may be part of the broader Profit Engine.
+
+---
+
+## 23. Prop-Firm Trading Accounts
+
+Prop-firm accounts are fundamentally different and must not be modeled as ordinary owned assets. A nominal $50,000 prop account does NOT mean the user owns a $50,000 financial asset. Prop buying power must not inflate net worth, owned assets, savings, or portfolio value.
+
+Eventually track: prop firm, account/program, account size/nominal buying power, evaluation vs funded, fees paid, trades, trading P&L, account status, payout eligibility, actual payouts, drawdown rules, other trading rules. Not all of this must be implemented initially.
+
+```
+PERSONALLY FUNDED: Your Capital → Trading Account → Trades / P&L → Owned Account Equity
+PROP FIRM: Program / Buying Power → Trades / Performance → Eligible Payout → Actual Payout Received → User's Financial System
+```
+
+Only actual money received by the user enters personal financial assets/cash flow.
+
+---
+
+## 24. Trading Analytics
+
+The structured Trade dataset should eventually support: trade count, win rate, average winner, average loser, gross P&L, net P&L, expectancy, average risk/reward, R multiples, drawdown, performance by strategy/setup/instrument/time/day, rule adherence.
+
+Future questions: Which setups are actually profitable? What time of day produces the strongest results? What happens after consecutive losses? Which strategies have positive expectancy? How consistently is the trading plan followed?
+
+This may eventually support an AI trading coach. Do NOT implement it yet. Reliable structured data and deterministic analytics must come first.
+
+---
+
+## 25. Receipts
+
+A Receipt is supporting evidence/data for a Transaction. It should not itself automatically become authoritative financial data.
+
+```
+Receipt Image/PDF → Extraction → Proposed Transaction → User Reviews / Corrects → Transaction Saved
+```
+
+Potential extracted information: merchant, date, time, location, subtotal, tax, total, items. Manual transaction entry remains mandatory even if OCR is implemented. Receipt OCR is not required for the immediate milestone.
+
+---
+
+## 26. Manufacturer / Shipped Purchases
+
+These may be represented as Transactions. Potential future optional fields: order number, tracking number, expected delivery, invoice, receipt. Do not complicate the current Transaction model merely to build shipment tracking.
+
+---
+
+## 27. Budgeting Philosophy
+
+Serenity should support both historical/observed spending and user-defined planned budgets. These are different (e.g. historical food average $480/month vs planned food budget $450/month). The modeling engine may use the selected planning value while still displaying actual historical behavior. Especially useful for food, children, fuel, variable utilities and other non-fixed costs.
+
+---
+
+## 28. Actual vs Projected vs Scenario
+
+- **Actual:** what really happened (e.g. actual monthly income $3,420).
+- **Projected:** expected future outcome based on current known variables (e.g. $3,600).
+- **Scenario:** a hypothetical model that does not alter real financial records (e.g. "What if hourly wage becomes $25?").
+
+Scenario calculations must NEVER overwrite actual records.
+
+---
+
+## 29. Financial Modeling Engine
+
+The long-term central intelligence layer of Serenity.
+
+Inputs: income, accounts, transactions, bills, debt, dependents, businesses, savings, investments, retirement, trading → SERENITY FINANCIAL MODEL → cash flow, net worth, obligations, spending, savings, Profit Engine value, asset allocation, debt exposure, trading capital, projections, scenarios.
+
+This is what differentiates Serenity from a basic expense tracker.
+
+---
+
+## 30. Conceptual Domain Relationships
+
+```
+User
+├── Accounts
+│   └── Transactions
+├── Businesses
+├── Dependents
+├── Bills
+├── Debts
+└── Portfolio / Profit Engine
+    ├── Savings Accounts
+    ├── Investment Accounts
+    │   └── Holdings
+    │       └── Investment Transactions
+    ├── Retirement Accounts
+    │   └── Holdings
+    └── Trading Accounts
+        ├── Personally Funded
+        │   └── Trades
+        └── Prop Firm
+            └── Trades
+```
+
+Do not interpret this diagram as an instruction to create every database table immediately. It describes the intended domain.
+
+---
+
+## 31. Store Facts, Calculate Results
+
+**Store authoritative financial facts. Calculate values that can reliably be derived from those facts.**
+
+Store: opening balance, transaction amount, purchase quantity, purchase price, trade entry, trade exit, current market price, debt balance, interest rate.
+
+Calculate: current account balance, average investment cost, cost basis, market value, unrealized P&L, portfolio allocation, trade P&L, win rate, cash flow, net worth.
+
+Avoid duplicating derived financial state unless caching becomes necessary later and there is a clear synchronization strategy.
+
+---
+
+## 32. Security Boundary
+
+Serenity does not currently require real banking credentials. Do not collect them. Future financial integrations must use appropriate APIs and security practices. Authentication, authorization, encryption and bank connectivity are separate architectural concerns. Do not create fake security merely to make the prototype appear production-ready.
+
+---
+
+## 33. Current Stabilization Work Still Comes First
+
+Before major new features:
+1. Move published Replit persistence from SQLite to PostgreSQL using DATABASE_URL.
+2. Retain SQLite for tests/local development where appropriate.
+3. Add Alembic migrations.
+4. Synchronize Replit → GitHub → local environment.
+5. Make the published application private.
+6. Fix known Replit finance bugs: recurring bill cent truncation, debt interest-rate conversion/truncation, investment quantity stored as text.
+7. Add tests for those bugs.
+8. Add edit/delete functionality where appropriate.
+9. Add backup/export.
+10. Restore/update project documentation.
+11. Review/remove unnecessary Node/TypeScript scaffolding.
+12. Add project-development rules to replit.md.
+
+Do not skip stabilization merely because the v0.2 model is now defined.
+
+---
+
+## 34. Next Implementation Milestone: Transactions
+
+After stabilization, the next vertical slice remains Transactions. Recommended scope: Transaction model, schema, service, API; manual transaction form; transaction list/history; account relationship; positive monetary amount; income/expense direction; classification; category/subcategory; required meaningful description; optional merchant; optional location; optional business association; optional dependent association; validation; tests; account balance integration; basic dashboard integration.
+
+Transfers may remain deferred. Receipt OCR is deferred. Portfolio purchase history is deferred. Trading implementation is deferred. Build one understandable vertical slice at a time.
+
+---
+
+## 35. Suggested Transaction Data Flow
+
+```
+User enters transaction → HTML/JavaScript form → FastAPI route → Pydantic schema validation
+→ Transaction service → SQLAlchemy model → Database → Service recalculates relevant analytics
+→ API response → Frontend display
+```
+
+Before implementing it, explain each step.
+
+---
+
+## 36. Developer Learning Requirement
+
+When introducing code or architecture, explain:
+1. What are we building?
+2. Why does this component exist?
+3. What data enters it?
+4. What validation occurs?
+5. What does the code do?
+6. What does it return or save?
+7. Which file owns the responsibility?
+8. How does it interact with existing code?
+9. How can it be manually tested?
+10. What software-engineering concept should Leighton understand from it?
+
+Do not generate enormous amounts of unexplained code.
+
+---
+
+## 37. AI Development Rules
+
+**Do:** inspect the current repository before proposing changes; respect existing architecture where reasonable; explain architectural changes first; keep financial logic out of frontend JavaScript; keep routes thin; use services for meaningful financial logic; use schemas for validation; keep database models focused on persistence; use descriptive names; keep functions/classes reasonably small; add tests; document calculations; identify files being changed; explain new dependencies; maintain compatibility with local development; keep the application runnable outside Replit; update documentation; preserve Git history through incremental commits.
+
+**Do not:** implement the entire v0.2 domain model at once; rewrite the architecture without approval; introduce unnecessary frameworks; hide calculations inside frontend code; create giant all-in-one modules; hardcode secrets; collect banking credentials; silently change financial formulas; treat prop buying power as net worth; treat unrealized investment gains as cash; treat trade P&L as withdrawn income; double-count Bills and Transactions; double-count Debt payments and Transactions; overwrite historical investment cost when market price changes; allow scenario data to overwrite actual data; create fake production-grade security.
+
+---
+
+## 38. Immediate Request to Claude
+
+Before writing substantial new feature code:
+1. Inspect the current Serenity repository.
+2. Compare the repository against this v0.2 handoff and the existing v0.1 handoff.
+3. Summarize the current architecture as it actually exists.
+4. Identify any conflicts between the existing implementation and this domain model.
+5. Review the existing Replit-generated Bills, Debt and Investment implementation.
+6. Review the known finance bugs.
+7. Propose the smallest safe stabilization plan.
+8. Identify the exact files that stabilization would modify.
+9. Explain the PostgreSQL + Alembic migration approach.
+10. Explain how SQLite will remain available for tests/local development.
+11. Do not implement the full Transaction/Portfolio/Trading architecture yet.
+12. Wait for approval before making significant architectural changes.
+
+After stabilization is complete and verified, propose the Transactions vertical slice separately.
+
+---
+
+## 39. Long-Term Product Direction
+
+Serenity should eventually answer: What are my actual monthly obligations? How much free cash flow do I have? How much does supporting each child currently cost? What should I budget for those costs? How much capital is intentionally allocated to long-term growth? How much of my net worth is invested? What did I originally pay for my investments? What are those investments worth now? How much income have dividends generated? How much personal capital is allocated to trading? How profitable is my actual trading? How much have I paid in prop-firm fees? How much money have I actually received from prop payouts? Where did withdrawn trading profits go? What happens to my finances if income increases? What happens if a major recurring expense disappears? How quickly can debt be reduced under different scenarios? How does increasing investment contributions affect long-term projections?
+
+These describe direction, not instructions to implement every answer immediately.
+
+---
+
+## 40. Final Engineering Principle
+
+Serenity is being built around the user's real financial system first. Generalization into a sellable product can happen after the architecture has been tested against real use.
+
+**Build the smallest reliable system that accurately represents the financial reality being modeled.**
+
+Do not optimize prematurely for a hypothetical mass-market SaaS product. Do not optimize for maximum feature count. Optimize for correctness, understandable architecture, reliable data, useful financial modeling, extensibility, testability, and developer learning.
+
+```
+STABILIZE → TRANSACTIONS → INCOME + BUDGET → FINANCIAL MODELING → PORTFOLIO / PROFIT ENGINE → TRADING ANALYTICS → ADVANCED INTELLIGENCE
+```
+
+Implementation should continue one tested vertical slice at a time.

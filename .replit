@@ -1,0 +1,49 @@
+modules = ["python-3.11", "nodejs-24", "postgresql-16"]
+
+[deployment]
+router = "application"
+deploymentTarget = "autoscale"
+run = ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port \"$PORT\""]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Serenity"
+
+[[workflows.workflow]]
+name = "Serenity"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "DATABASE_URL=sqlite:///./serenity.db sh -c 'alembic upgrade head && SERENITY_DEV=1 python main.py'"
+waitForPort = 8000
+
+[[workflows.workflow]]
+name = "test"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pytest -q"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 120000
+
+[nix]
+channel = "stable-25_05"
+packages = ["gitFull", "playwright-driver", "postgresql"]

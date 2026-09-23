@@ -1,21 +1,63 @@
+# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+
+# compiled output
+dist
+tmp
+out-tsc
+*.tsbuildinfo
+.expo
+.expo-shared
+
+# dependencies
+node_modules
+
+# IDEs and editors
+/.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# misc
+/.sass-cache
+/connect.lock
+/coverage
+/libpeerconnection.log
+npm-debug.log
+yarn-error.log
+testem.log
+/typings
+
+# System Files
+.DS_Store
+Thumbs.db
+
+.cursor/rules/nx-rules.mdc
+.github/instructions/nx.instructions.md
+
+# Replit
+.cache/
+.local/
+
 # Python
 __pycache__/
-*.pyc
-.venv/
-venv/
+*.py[cod]
 .pytest_cache/
+.pythonlibs/
+.venv/
+.vite/
 
-# Local database: holds YOUR real financial data. Never commit it.
-*.db
-*.sqlite3
-
-# Secrets
+# Local environment settings
 .env
 
-# Uploaded receipts (future)
-uploads/
-
-# Editors / OS
-.vscode/
-.idea/
-.DS_Store
+# Serenity runtime data
+*.db

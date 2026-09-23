@@ -1,0 +1,5 @@
+- [Private GitHub source](github-source.md) — use the authenticated GitHub integration for future Serenity source syncs.
+- [Artifact manifest updates](replit-artifact-metadata.md) — Replit-managed artifact manifests require validated replacement, and service commands run from artifact directories.
+- [Python dependency setup](python-publish-dependencies.md) — Replit manages requirements; avoid explicit pip in publish builds and post-merge setup.
+- [Browser validation workflow](browser-validation-workflow.md) — keep Chromium checks in named validation, not the normal app Run button.
+- [Legacy SQLite and Alembic](legacy-sqlite-alembic.md) — pre-migration SQLite files can block Alembic; inspect and preserve data before initializing a new database.

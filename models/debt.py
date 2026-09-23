@@ -1,10 +1,22 @@
-class Debt:
-    def __init__(self, name, amount, description, interest_rate, due_date):
-        self.name = name
-        self.amount = amount
-        self.description = description
-        self.interest_rate = interest_rate
-        self.due_date = due_date
+from datetime import date, datetime
 
-    def __str__(self):
-        return f"Debt(name={self.name}, amount={self.amount}, description={self.description}, interest_rate={self.interest_rate}, due_date={self.due_date})"
+from sqlalchemy import Date, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from models.account import utc_now
+from storage.database import Base
+
+
+class Debt(Base):
+    __tablename__ = "debts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    debt_type: Mapped[str] = mapped_column(String(50), default="Other")
+    balance_cents: Mapped[int] = mapped_column(Integer, default=0)
+    interest_rate_milli: Mapped[int] = mapped_column(Integer, default=0)
+    minimum_payment_cents: Mapped[int] = mapped_column(Integer, default=0)
+    due_date: Mapped[date | None] = mapped_column(Date)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(default=utc_now, onupdate=utc_now)

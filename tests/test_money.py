@@ -4,7 +4,15 @@ from decimal import Decimal
 
 import pytest
 
-from utils.money import cents_to_dollars, dollars_to_cents
+from utils.money import (
+    cents_to_dollars,
+    dollars_to_cents,
+    milli_to_percent,
+    percent_to_milli,
+    quantity_to_units,
+    round_half_up_division,
+    units_to_quantity,
+)
 
 
 def test_dollars_to_cents():
@@ -29,3 +37,11 @@ def test_round_trip_is_exact():
 def test_refuses_fractions_of_a_cent():
     with pytest.raises(ValueError):
         dollars_to_cents(Decimal("1.005"))
+
+
+def test_scaled_financial_units_are_exact():
+    assert percent_to_milli(Decimal("6.875")) == 6875
+    assert milli_to_percent(6875) == Decimal("6.875")
+    assert quantity_to_units(Decimal("0.12345678")) == 12_345_678
+    assert units_to_quantity(12_345_678) == Decimal("0.12345678")
+    assert round_half_up_division(100, 12) == 8

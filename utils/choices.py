@@ -15,8 +15,8 @@ ACCOUNT_TYPES = [
     "Cash",
     "Business Checking",
     "Brokerage",
+    "Retirement",
     "Trading",
-    "Credit Card",
     "Other",
 ]
 
@@ -26,4 +26,30 @@ ACCOUNT_CLASSIFICATIONS = [
     "Business",
     "Investment",
     "Trading",
+]
+
+TRANSACTION_TYPES = ["Income", "Expense"]
+
+TRANSACTION_CATEGORIES = [
+    "Housing", "Insurance", "Education", "Subscriptions", "Utilities",
+    "Transportation", "Car Maintenance", "Children", "Groceries", "Food",
+    "Business Equipment", "Business Software", "Inventory", "Shipping",
+    "Investment Contribution", "Dividend", "Trading Expense", "Other",
+]
+
+BILL_FREQUENCIES = [
+    "Monthly",
+    "Quarterly",
+    "Annual",
+    "One-time",
+]
+
+DEBT_TYPES = [
+    "Credit Card",
+    "Student Loan",
+    "Personal Loan",
+    "Mortgage",
+    "Auto Loan",
+    "Medical",
+    "Other",
 ]

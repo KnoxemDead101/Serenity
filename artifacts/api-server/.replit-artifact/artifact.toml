@@ -1,0 +1,13 @@
+kind = "api"
+previewPath = "/api"
+title = "Retired API Scaffold"
+version = "1.0.0"
+id = "3B4_FFSkEVBkAeYMFRJ2e"
+
+[[services]]
+localPort = 8080
+name = "Retired API Scaffold"
+paths = ["/api"]
+
+[services.development]
+run = '''python -c 'print("Retired: Serenity APIs are served by the main FastAPI app under /serenity-api.")' '''

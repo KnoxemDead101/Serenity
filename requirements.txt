@@ -1,9 +1,11 @@
-# Web framework: turns Python functions into API routes (URLs).
+# Runtime
 fastapi>=0.115
-# The server that runs the FastAPI app.
 uvicorn>=0.30
-# Maps Python classes to database tables (the ORM).
 sqlalchemy>=2.0
+psycopg[binary]>=3.2
+alembic>=1.14
+
 # Testing
 pytest>=8.0
-httpx>=0.27  # used by FastAPI's TestClient
+httpx>=0.27
+playwright

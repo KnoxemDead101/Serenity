@@ -19,10 +19,14 @@ function makeCard(label, value) {
 }
 
 async function loadDashboard() {
-  const summary = await apiGet("/api/dashboard/summary");
+  const summary = await apiGet("/serenity-api/dashboard/summary");
 
   document.getElementById("total-balance").textContent = formatMoney(summary.total_balance);
   document.getElementById("account-count").textContent = summary.account_count;
+  document.getElementById("monthly-bills").textContent = formatMoney(summary.monthly_bill_total);
+  document.getElementById("debt-balance").textContent = formatMoney(summary.debt_balance);
+  document.getElementById("investment-value").textContent = formatMoney(summary.investment_value);
+  document.getElementById("net-worth").textContent = formatMoney(summary.net_worth);
 
   const container = document.getElementById("classification-cards");
   container.replaceChildren();

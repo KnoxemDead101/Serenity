@@ -26,13 +26,22 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 # The database location comes from an environment variable so it can be
 # changed without editing code (see .env.example). The default is a file
 # called serenity.db in the folder you run the app from.
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./serenity.db")
+def get_database_url() -> str:
+    """Return a SQLAlchemy URL for SQLite or Replit PostgreSQL."""
+    url = os.getenv("DATABASE_URL", "sqlite:///./serenity.db")
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg://", 1)
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return url
 
-# check_same_thread=False is needed because FastAPI may use a different
-# thread for each request, and SQLite normally forbids that.
+
+DATABASE_URL = get_database_url()
+IS_SQLITE = DATABASE_URL.startswith("sqlite")
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False},
+    connect_args={"check_same_thread": False} if IS_SQLITE else {},
+    pool_pre_ping=True,
     echo=False,
 )
 
@@ -50,12 +59,3 @@ def get_db():
         yield db
     finally:
         db.close()
-
-
-def init_db() -> None:
-    """Create any missing tables. Safe to run every time the app starts."""
-    # Importing the model module registers the Account table on Base.
-    # Without this import, SQLAlchemy wouldn't know the table exists.
-    import models.account  # noqa: F401
-
-    Base.metadata.create_all(bind=engine)

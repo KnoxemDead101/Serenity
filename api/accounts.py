@@ -1,10 +1,12 @@
 """
 Account API routes (the URLs the frontend calls).
 
-    POST /api/accounts          create an account
-    GET  /api/accounts          list all accounts
-    GET  /api/accounts/options  allowed account types and classifications
-    GET  /api/accounts/{id}     get one account
+    POST /serenity-api/accounts          create an account
+    GET  /serenity-api/accounts          list all accounts
+    GET  /serenity-api/accounts/options  allowed account types and classifications
+    GET  /serenity-api/accounts/{id}     get one account
+    PUT  /serenity-api/accounts/{id}/transactions/{transaction_id}
+    DELETE /serenity-api/accounts/{id}/transactions/{transaction_id}
 
 Routes stay thin on purpose: receive the request, call the service,
 return the result. No financial logic lives here.
@@ -21,7 +23,7 @@ from services import account_service
 from storage.database import get_db
 from utils.choices import ACCOUNT_CLASSIFICATIONS, ACCOUNT_TYPES
 
-router = APIRouter(prefix="/api/accounts", tags=["Accounts"])
+router = APIRouter(prefix="/serenity-api/accounts", tags=["Accounts"])
 
 
 @router.post("", response_model=AccountRead, status_code=status.HTTP_201_CREATED)

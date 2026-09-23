@@ -1,0 +1,162 @@
+# Serenity: v0.2 Review and Stabilization Plan
+
+*September 22, 2026. Answers section 38 of `serenity_v0_2_handoff.md`. Reviewed against the live Replit workspace ("Serenity", @lknox3); GitHub and the local folder weren't reachable during the review.*
+
+**Status: proposal. Nothing implemented yet; waiting for approval.**
+
+---
+
+## 1. Critical finding: the published site isn't running Serenity
+
+Replit Agent set the project up as a Node/TypeScript "pnpm workspace", which runs differently in preview and in production:
+
+| Mode | What actually runs |
+|---|---|
+| **Preview (workspace)** | `artifacts/serenity/package.json` → `dev` → `python main.py`. **Real Serenity works here.** |
+| **Published** (`serenity--lknox3.replit.app`) | `artifacts/serenity/.replit-artifact/artifact.toml` → production → `vite build`, served as **static files**. That builds a React placeholder whose home page says "Replit Agent is building…". Every URL (including `/serenity-api/...`) is rewritten to that placeholder. **FastAPI isn't running at all.** |
+
+Checked on 9/22: fetching the live URL and `/serenity-api/accounts/options` both returned the placeholder page, not Serenity or JSON.
+
+So the preview was tested successfully, but the published app has never actually been Serenity. It also means no data has been lost, because the published site never had a database.
+
+## 2. How the architecture actually looks today
+
+```
+Serenity (Python app, works in the Replit preview)
+  main.py                      FastAPI app: routers + static frontend (/, /accounts, /finances)
+  api/        accounts.py      /serenity-api/accounts  (create, list, get, options)
+              finance.py       /serenity-api/bills, /debts, /investments (create + list only), /finance/summary
+              dashboard.py     /serenity-api/dashboard/summary
+  schemas/    account.py       AccountCreate/Read, AccountTotals (now also carries bill/debt/investment totals)
+              finance.py       Bill/Debt/Investment Create/Read, FinanceSummary + local validators
+  services/   account_service  accounts + totals; imports finance_service inside a function
+              finance_service  bills/debts/investments + monthly bill normalization
+  models/     account, bill, debt, investment (SQLAlchemy); income.py is still the old plain class
+  storage/    database.py      DATABASE_URL (default SQLite), create_all() at startup
+  utils/      money, validators, choices (+ BILL_FREQUENCIES)
+  frontend/   index, accounts, finances (.html) + js (api, dashboard, accounts, finances)
+  tests/      conftest (in-memory SQLite), money, validators, account service/API, finance API (1 test)
+  docs/       architecture.md, data-model.md (don't mention finance yet)
+
+Replit Agent scaffolding (Node/TypeScript, not used by Serenity)
+  artifacts/serenity/          React/Vite template; its production config is what's published (see §1)
+  artifacts/api-server/        Express server claiming /api (why Serenity moved to /serenity-api)
+  artifacts/mockup-sandbox/    design sandbox
+  lib/api-spec, api-zod, api-client-react, db (Drizzle ORM for Postgres)
+  scripts/post-merge.sh        runs `pnpm install` + `drizzle-kit push` after merges
+  package.json, pnpm-*.yaml, tsconfig*.json
+  .replit                      modules nodejs-24 + python-3.11; agent stack PNPM_WORKSPACE; workflow forces SQLite
+```
+
+Other things I noticed:
+- `README.md` was renamed to `SERENITY_README.md`.
+- `requirements.txt` has every package listed twice (pinned and unpinned).
+- Replit's `.gitignore` replaced ours and no longer ignores `.env` or `.venv/` (`*.db` is still ignored).
+- `main.py` runs uvicorn with `reload=True`, which is fine for development but not for production.
+- `scripts/post-merge.sh` runs `drizzle-kit push` against the Postgres `DATABASE_URL`. Once Serenity's own tables are in Postgres, Drizzle would see tables that aren't in its (TypeScript) schema. That's a real risk to our tables and another reason to remove the scaffolding.
+
+## 3. Review of the Replit-written Bills / Debt / Investments
+
+**Good:**
+- Follows the layers (route → schema → service → model).
+- Stores money in cents.
+- Rejects negative amounts and more than 2 decimal places.
+- The frontend only displays values.
+
+**Bugs, checked against the actual code:**
+
+| # | Issue | Evidence | Impact |
+|---|---|---|---|
+| B1 | **Monthly bill normalization truncates** | `finance_service.get_finance_summary`: quarterly `amount_cents // 3`, annual `// 12` | A $100.00 quarterly bill counts as $33.33/month. Three of them total $99.99 instead of $100.00. The error grows with each bill because rounding happens per bill. |
+| B2 | **Interest-rate conversion** | `int(data.interest_rate * 100)` into `interest_rate_bps` | The math is exact today only because the schema rejects more than 2 decimals. But that rule **rejects real rates like 6.875% APR**. The conversion is fragile, and the precision is too low. |
+| B3 | **Investment quantity stored as text** | `models/investment.py`: `quantity: String(50)` | The database can't sort, sum or check it. (A plain `Numeric` column would silently become a float in SQLite, which is probably why the Agent used text.) |
+| B4 | One-time bills | counted in `bill_count` but not in the monthly total | Needs a documented rule, not necessarily a code change. |
+| B5 | Only one finance test | `tests/test_finance_api.py` | Nothing tests B1, B2 or B3. |
+
+## 4. Conflicts with the v0.2 domain model
+
+| Area | Current | v0.2 | Recommendation |
+|---|---|---|---|
+| Investments | `Investment` stores `cost_basis` + `current_value` directly | Holding (quantity × current_price) + InvestmentTransaction; cost basis is derived | **Mark it temporary.** Fix only B3 now; replace it in the Portfolio milestone. Don't enter real portfolio data yet. |
+| Credit cards | negative opening balance on an Account | Debt is the liability | Pick one rule to avoid **double counting** when net worth arrives. Recommended: a credit card is an Account (for transactions) *and* its balance owed lives in Debt, and net worth counts it once. Decide before Transactions. |
+| Account fields | `notes`; no `active`, `description`, `business_id`; no "Retirement" type; "Business Checking" type | `active`, `description`, optional `business_id`, `retirement` type | Add `active` and "Retirement" now (small and cheap before the migration baseline). Business entity comes later. |
+| Choice values | Display text ("Checking") | lowercase codes (`checking`) | Keep display text for now; switching is a separate, deliberate change. |
+| Bills | no `account_id`, `autopay`, `active` | v0.1 spec had them; v0.2 wants Bill ↔ Transaction matching | Defer to the Income + Budget milestone. |
+| Coupling | `account_service` imports `finance_service`; `AccountTotals` holds bill/debt/investment fields | Separate systems, not tightly coupled | Add `services/dashboard_service.py` + `schemas/dashboard.py` that **combine** the two, and restore `AccountTotals` to accounts only. The API response shape stays the same. |
+| Income | `models/income.py` is the old plain class | Income is part of the model | Leave it until the Income milestone. |
+| API prefix | `/serenity-api` | n/a | Keep it; changing it again is churn without benefit. |
+
+## 5. The smallest safe stabilization plan
+
+Four small phases, each its own commit and tested before the next. Order matters: **fix the table designs before creating the first migration**, so the baseline migration is clean.
+
+### Phase A — Make publishing run the real app (remove the scaffolding)
+- **Delete:** `artifacts/`, `lib/`, `scripts/`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig.json`, `tsconfig.base.json`
+- **Modify `.replit`:**
+  - Python module only
+  - Run button = `python main.py`
+  - Deployment: build = `pip install -r requirements.txt`; run = `alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT` (the Alembic part is added in Phase C)
+  - Remove `postMerge`, the pnpm `agent.stack` and the forced SQLite `DATABASE_URL`
+- **Modify `main.py`:** reload only when `SERENITY_DEV=1`
+- **Modify `replit.md`:** accurate description + the Serenity rules for Replit Agent
+- **Modify `requirements.txt`:** remove the duplicates
+- *Verify:* republish → the live URL shows the real dashboard.
+
+### Phase B — Fix the finance bugs (before the migration baseline)
+- **`utils/money.py`:**
+  - add `round_half_up_cents(numerator, denominator)`, so a monthly total is **summed exactly first and rounded once**
+  - add `percent_to_milli(rate)` / `milli_to_percent(value)`: rates stored as thousandths of a percent (6.875% → 6875), allowing up to 3 decimals, rejecting more, never truncating
+- **`models/debt.py`:** `interest_rate_bps` → `interest_rate_milli`
+- **`models/investment.py`:** `quantity` → `quantity_units` (integer, 1 unit = 0.00000001), the same idea as cents
+- **`schemas/finance.py`:** rate validator allows 3 decimals; conversions go through the helpers
+- **`services/finance_service.py`:** new monthly-normalization function with the rule documented in its docstring (Monthly ×1, Quarterly ÷3, Annual ÷12, One-time excluded)
+- **New `services/dashboard_service.py` + `schemas/dashboard.py`;** `services/account_service.py` and `schemas/account.py` go back to accounts only; `api/dashboard.py` calls the dashboard service
+- **`utils/choices.py`:** add "Retirement"
+- **`models/account.py`:** add `active` (default true)
+- **Tests:**
+  - new `tests/test_finance_service.py`: B1 (three quarterly $100 → $100.00), annual rounding, one-time excluded, 6.875% round-trip, 4-decimal rate rejected, fractional quantity round-trip
+  - update `tests/test_finance_api.py`
+- *Verify:* `pytest` passes in Replit.
+
+### Phase C — PostgreSQL + Alembic
+- **`requirements.txt`:** add `alembic`, `psycopg[binary]`
+- **`storage/database.py`:**
+  - `get_database_url()` turns Replit's `postgres://...` into `postgresql+psycopg://...`
+  - `check_same_thread` only for SQLite
+  - `pool_pre_ping=True`, because Replit's production Postgres (Neon) sleeps after 5 idle minutes
+- **New:** `alembic.ini`, `migrations/env.py` (reads the same URL, `target_metadata = Base.metadata`, `render_as_batch=True` for SQLite), `migrations/versions/0001_baseline.py` (autogenerated, then reviewed by hand)
+- **`main.py` lifespan:** `create_all()` is no longer the production path. Startup relies on `alembic upgrade head` in the run command. For convenience, local SQLite may still run `create_all()` when a dev flag is set.
+- **`tests/test_migrations.py`:** runs `alembic upgrade head` on a temporary SQLite file and checks that the tables match the models, so migrations can't drift from the code.
+- **Also update:** `.env.example`, `.gitignore` (add `.env`, `.venv/`)
+- *Verify:* in Replit, create the database → preview writes to the **development** DB → publish → the published app writes to the **production** DB → restart/republish → data is still there.
+
+### Phase D — Docs and hygiene
+- Rename `SERENITY_README.md` → `README.md`
+- Update `docs/architecture.md` (finance layer, dashboard service, deployment) and `docs/data-model.md` (bills, debts, investments, units, migration workflow)
+
+### After A–D (already on the list; separate small slices)
+- Make the app private: publish settings → Invite only → republish (you do this).
+- Edit/delete for accounts, bills and debts. Consider "deactivate" instead of delete where history matters.
+- Export: a JSON/CSV download of all records.
+
+## 6. How PostgreSQL + Alembic will work
+
+- **One setting chooses the database.** `DATABASE_URL` is set → use it (Replit Postgres). Not set → `sqlite:///./serenity.db`. The code doesn't change between environments.
+- **Replit has two Postgres databases.** The workspace preview uses the **development** database and the published app uses the **production** database, each with its own `DATABASE_URL`. Test data in the preview never mixes with real data.
+- **Alembic = version control for the database structure.** Each change (e.g. "add transactions table") becomes a numbered migration file in Git. `alembic upgrade head` brings any database, whether a new SQLite file or the production Postgres, up to the latest structure **without deleting data**. `create_all()` can create missing tables but can never change an existing one, which is why it isn't enough once real data exists.
+- **The workflow for every future model change:** edit the model → `alembic revision --autogenerate -m "..."` → read the generated file → `alembic upgrade head` locally → commit both → the deploy runs the upgrade.
+
+## 7. How SQLite stays available
+- **Tests:** `conftest.py` always uses an in-memory SQLite database (it already ignores a Postgres `DATABASE_URL`). Tests stay fast and never touch real data. `test_migrations.py` also checks the migrations on SQLite.
+- **Local development on your PC:** don't set `DATABASE_URL`, and it uses `serenity.db`. Run `alembic upgrade head` once, then `python main.py`.
+- **Why both work:** SQLAlchemy hides the differences. Where the two databases differ (decimals, altering tables), we store integers (cents, milli-percent, quantity units) and use Alembic's batch mode, so the same code and migrations behave the same way on both.
+
+## 8. Decisions needed before starting
+1. Approve removing the Node/TypeScript scaffolding (Phase A). This is required to fix publishing.
+2. Approve storage units: rates in thousandths of a percent; quantities in 1e-8 units.
+3. Investments: minimal fix now and replace later (recommended), or hide the feature until the Portfolio milestone?
+4. Credit card rule (§4).
+
+## 9. Working setup
+- I can't reach the local folder right now, and GitHub is private. Confirm the Replit → GitHub push happened.
+- Phase A has to be applied where `.replit` lives. Plan: I write the changes into the local folder → you commit/push → Replit `git pull` → republish.

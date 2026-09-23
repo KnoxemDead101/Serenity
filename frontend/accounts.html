@@ -12,6 +12,7 @@
     <nav>
       <a href="/">Dashboard</a>
       <a href="/accounts" class="active">Accounts</a>
+      <a href="/finances">Finances</a>
     </nav>
   </header>
 
@@ -32,7 +33,7 @@
         </label>
         <label>Opening balance ($)
           <input name="opening_balance" type="number" step="0.01" value="0.00" required>
-          <small class="muted">Use a negative number for money owed (e.g. a credit card).</small>
+          <small class="muted">For credit cards and other money owed, add a debt on Finances instead.</small>
         </label>
         <label>Institution <span class="muted">(optional)</span>
           <input name="institution" maxlength="100">
@@ -60,6 +61,88 @@
           </thead>
           <tbody id="accounts-body">
             <tr><td colspan="5" class="muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Record a transaction</h2>
+      <form id="transaction-form" class="wide-form form-grid">
+        <label>Account
+          <select name="account_id" required></select>
+        </label>
+        <label>Date
+          <input name="date" type="date" required>
+        </label>
+        <label>Type
+          <select name="transaction_type" required>
+            <option value="Income">Income</option>
+            <option value="Expense">Expense</option>
+          </select>
+        </label>
+        <label>Amount ($)
+          <input name="amount" type="number" min="0.01" step="0.01" required>
+        </label>
+        <label>Description <span class="muted">(why)</span>
+          <input name="description" required maxlength="200" placeholder="e.g. Replacement SSD for workstation">
+        </label>
+        <label>Classification
+          <select name="classification">
+            <option value="">Same as account</option>
+          </select>
+        </label>
+        <label>Merchant <span class="muted">(optional)</span>
+          <input name="merchant" maxlength="100" placeholder="e.g. Newegg">
+        </label>
+        <label>Location <span class="muted">(optional)</span>
+          <input name="location" maxlength="100">
+        </label>
+        <label>Category <span class="muted">(optional)</span>
+          <input name="category" maxlength="100" list="category-suggestions" placeholder="e.g. Business Equipment">
+          <datalist id="category-suggestions"></datalist>
+        </label>
+        <label>Subcategory <span class="muted">(optional)</span>
+          <input name="subcategory" maxlength="100">
+        </label>
+        <button type="submit">Record transaction</button>
+        <button type="button" id="transaction-cancel" class="secondary" hidden>Cancel edit</button>
+      </form>
+      <p id="transaction-message" class="message" hidden></p>
+      <h2>Transaction history</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Description</th>
+              <th>Merchant</th>
+              <th>Classification</th>
+              <th>Category</th>
+              <th class="num">Amount</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="transactions-body">
+            <tr><td colspan="8" class="muted">Choose an account to see its transactions.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h2>Correction history</h2>
+      <p class="muted">Edits and deletions are recorded here. Deleted transactions no longer affect your balance.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Changed</th>
+              <th>Action</th>
+              <th>Before</th>
+              <th>After</th>
+            </tr>
+          </thead>
+          <tbody id="corrections-body">
+            <tr><td colspan="4" class="muted">No corrections yet for this account.</td></tr>
           </tbody>
         </table>
       </div>

@@ -80,6 +80,11 @@ h2 { font-size: 1.1rem; margin: 24px 0 12px; }
 .card-value { font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 
 form { display: grid; gap: 12px; max-width: 480px; }
+.wide-form { max-width: none; margin-bottom: 20px; }
+.form-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); align-items: end; }
+.form-grid label { min-width: 0; }
+.form-grid input, .form-grid select, .form-grid textarea { width: 100%; min-width: 0; }
+.form-grid button { height: max-content; }
 label { display: grid; gap: 4px; font-weight: 500; }
 small { font-weight: 400; }
 
@@ -104,6 +109,16 @@ button {
   justify-self: start;
 }
 
+button.secondary {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.row-actions { display: flex; gap: 6px; }
+.row-actions button { padding: 5px 9px; font-size: 0.9rem; }
+.row-actions .danger { background: var(--error); color: #fff; }
+
 .message { margin: 0; }
 .success { color: var(--success); }
 .error { color: var(--error); }
@@ -113,3 +128,9 @@ table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
 th { color: var(--muted); font-weight: 600; font-size: 0.9rem; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 640px) {
+  .topbar { align-items: flex-start; flex-direction: column; }
+  nav { flex-wrap: wrap; }
+  .form-grid { grid-template-columns: 1fr; }
+}

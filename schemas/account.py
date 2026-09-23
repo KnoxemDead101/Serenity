@@ -74,6 +74,7 @@ class AccountRead(BaseModel):
     current_balance: Decimal
     institution: str | None
     notes: str | None
+    active: bool
     created_at: datetime
     updated_at: datetime
 

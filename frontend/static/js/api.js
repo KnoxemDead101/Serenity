@@ -21,6 +21,20 @@ async function apiPost(url, body) {
   return handleResponse(response);
 }
 
+async function apiPut(url, body) {
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return handleResponse(response);
+}
+
+async function apiDelete(url) {
+  const response = await fetch(url, { method: "DELETE" });
+  return handleResponse(response);
+}
+
 // If the server reports an error, turn it into a readable message.
 async function handleResponse(response) {
   const data = await response.json().catch(() => null);

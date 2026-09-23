@@ -1,0 +1,13 @@
+kind = "design"
+previewPath = "/__mockup"
+title = "Retired Canvas"
+version = "1.0.0"
+id = "XegfDyZt7HqfW2Bb8Ghoy"
+
+[[services]]
+localPort = 8081
+name = "Retired Component Preview"
+paths = ["/__mockup"]
+
+[services.development]
+run = '''python -c 'print("Retired: Serenity now runs as a Python-only application.")' '''

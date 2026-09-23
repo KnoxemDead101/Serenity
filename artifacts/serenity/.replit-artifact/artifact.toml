@@ -1,0 +1,22 @@
+kind = "web"
+previewPath = "/"
+title = "Serenity"
+description = "A personal finance and investment intelligence application that organizes accounts, debts, bills, investments, and financial analysis."
+version = "1.0.0"
+id = "artifacts/serenity"
+router = "path"
+
+[[services]]
+name = "web"
+paths = ["/"]
+localPort = 19826
+
+[services.development]
+run = "cd ../.. && DATABASE_URL=sqlite:///./serenity.db sh -c 'alembic upgrade head && SERENITY_DEV=1 python main.py'"
+
+[services.production]
+run = ["sh", "-c", "if [ -f main.py ]; then APP_DIR=.; elif [ -f ../../main.py ]; then APP_DIR=../..; else echo 'Could not locate Serenity main.py' >&2; exit 1; fi; exec uvicorn --app-dir \"$APP_DIR\" main:app --host 0.0.0.0 --port ${PORT:-19826}"]
+
+[services.env]
+PORT = "19826"
+BASE_PATH = "/"

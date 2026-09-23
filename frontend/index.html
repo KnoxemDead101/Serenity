@@ -12,12 +12,13 @@
     <nav>
       <a href="/" class="active">Dashboard</a>
       <a href="/accounts">Accounts</a>
+      <a href="/finances">Finances</a>
     </nav>
   </header>
 
   <main>
     <h1>Dashboard</h1>
-    <p class="muted">Totals are calculated from your stored accounts every time this page loads.</p>
+    <p class="muted">A current view of your accounts, recurring commitments, debt, and investments.</p>
 
     <section class="cards">
       <div class="card">
@@ -27,6 +28,22 @@
       <div class="card">
         <div class="card-label">Accounts</div>
         <div class="card-value" id="account-count">–</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Monthly bills</div>
+        <div class="card-value" id="monthly-bills">–</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Debt balance</div>
+        <div class="card-value" id="debt-balance">–</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Investment value</div>
+        <div class="card-value" id="investment-value">–</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Net worth</div>
+        <div class="card-value" id="net-worth">–</div>
       </div>
     </section>
 

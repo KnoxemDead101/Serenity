@@ -1,10 +1,21 @@
-class Investment:
-    def __init__(self, name, amount, interest_rate, maturity_date, date_invested=None):
-        self.name = name
-        self.amount = amount
-        self.interest_rate = interest_rate
-        self.maturity_date = maturity_date
-        self.date_invested = date_invested
+from datetime import datetime
 
-    def __str__(self):
-        return f"Investment(name={self.name}, amount={self.amount}, interest_rate={self.interest_rate}, maturity_date={self.maturity_date}, date_invested={self.date_invested})"
+from sqlalchemy import Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from models.account import utc_now
+from storage.database import Base
+
+
+class Investment(Base):
+    __tablename__ = "investments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    ticker: Mapped[str | None] = mapped_column(String(20))
+    quantity_units: Mapped[int] = mapped_column(Integer, default=0)
+    cost_basis_cents: Mapped[int] = mapped_column(Integer, default=0)
+    current_value_cents: Mapped[int] = mapped_column(Integer, default=0)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(default=utc_now, onupdate=utc_now)
