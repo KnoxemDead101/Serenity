@@ -9,7 +9,10 @@ import models.business  # noqa: F401
 import models.debt  # noqa: F401
 import models.dependent  # noqa: F401
 import models.investment  # noqa: F401
+import models.instrument  # noqa: F401
+import models.portfolio  # noqa: F401
 import models.income_profile  # noqa: F401
+import models.identity  # noqa: F401
 import models.transaction  # noqa: F401
 import models.transaction_correction  # noqa: F401
 from storage.database import Base, get_database_url

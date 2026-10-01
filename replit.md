@@ -19,11 +19,12 @@ learning project, so readable, commented code is a product requirement.
 ## Run and verify
 
 - Replit manages Python dependencies from `requirements.txt`; do not run a global pip install in post-merge setup.
-- Before every Publish: `SERENITY_DEVELOPMENT_DATABASE=1 bash scripts/prepublish_check.sh`
+- Before every Publish: `bash scripts/prepublish_check.sh`
 - Local schema: `DATABASE_URL=sqlite:///./serenity.db alembic upgrade head`
 - Local app: `SERENITY_DEV=1 DATABASE_URL=sqlite:///./serenity.db python main.py`
-- Tests: `pytest` (includes Chromium/Playwright Accounts browser checks;
-  Chromium is required and tests fail if it is unavailable)
+- Required automated validation: `bash scripts/prepublish_check.sh` (full suite,
+  mandatory disposable PostgreSQL and Chromium/Playwright browser checks).
+- `pytest` alone is a convenience run, not the publishing gate.
 
 ## Stack
 
@@ -66,8 +67,9 @@ learning project, so readable, commented code is a product requirement.
 - Replit Publish reviews and applies the development-to-production schema
   structure. Production does not run Alembic.
 - Before Publish, run
-  `SERENITY_DEVELOPMENT_DATABASE=1 bash scripts/prepublish_check.sh` against
-  the explicitly selected development PostgreSQL database.
+  `bash scripts/prepublish_check.sh`. This ignores inherited database settings
+  and tests migrations only in a disposable private PostgreSQL cluster; it
+  never migrates an existing development or production database.
 - Data corrections are separate, explicitly authorized operations; Publish does
   not make production data safe automatically.
 - Production runs Uvicorn through the Serenity artifact manifest.

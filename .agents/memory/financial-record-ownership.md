@@ -3,8 +3,8 @@ name: Financial record ownership
 description: The privacy boundary for Serenity financial data and legacy database migration.
 ---
 
-Serenity uses per-user ownership, not a shared household dataset. The authenticated Clerk user ID is the owner for accounts, transactions, transaction corrections, finance records, business/dependent labels, summaries, and exports. Cross-record links must resolve to the same owner.
+Serenity uses isolated ownership, not a shared household dataset. Provider changes must preserve financial ownership through explicit verified identity linking, never guessed links based on email or matching subject strings.
 
 **Why:** Invite-only access controls entry but does not separate invited members. A default or guessed owner during migration could expose existing financial data to the wrong member.
 
-**How to apply:** Pass the authenticated user ID through every protected API into service queries and mutations. When migrating populated legacy data, require `SERENITY_LEGACY_OWNER_ID`; never silently assign a default owner.
+**How to apply:** Resolve the verified provider, issuer and subject to the existing internal workspace. Never trust a caller-selected workspace without authorization. For legacy ownership migration, confirm tenant provenance before changing rows; mixed or uncertain tenants require an explicit mapping, not an automatic backfill.

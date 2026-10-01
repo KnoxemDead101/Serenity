@@ -1,4 +1,4 @@
-const clerkScriptUrl = "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js";
+const clerkScriptUrl = "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@6.33.0/dist/clerk.browser.js";
 const clerkUiScriptUrl = "https://cdn.jsdelivr.net/npm/@clerk/ui@1.34.0/dist/ui.browser.js";
 
 function loadScript(url) {

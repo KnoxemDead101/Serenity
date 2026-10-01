@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0a0a">
+  <title>Serenity · Portfolios</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">Serenity</span>
+    <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="site-nav">Menu</button>
+    <nav id="site-nav" class="site-nav" aria-label="Main">
+      <a href="/">Dashboard</a>
+      <a href="/accounts">Accounts</a>
+      <a href="/finances">Finances</a>
+      <a href="/income">Income</a>
+      <a href="/profit-engine">Profit Engine</a>
+      <a href="/portfolios" class="active" aria-current="page">Portfolios</a>
+      <a href="/setup">Setup</a>
+      <a href="/sign-out" class="sign-out">Sign out</a>
+    </nav>
+  </header>
+  <main>
+    <h1>Portfolios</h1>
+    <p class="muted">A portfolio holds your investments. Add an investment on the Finances page and choose its portfolio there. New investments stay uncounted until review. A portfolio name does not establish ownership or sharing.</p>
+
+    <section class="panel" aria-labelledby="portfolio-title">
+      <h2 id="portfolio-title">Your portfolios</h2>
+      <p class="muted">Empty portfolios are welcome. Move active investments before archiving a portfolio.</p>
+      <form id="portfolio-form" class="wide-form form-grid">
+        <label>Name <input name="name" required maxlength="100" autocomplete="off"></label>
+        <label>Notes <span class="muted">(optional)</span>
+          <textarea name="notes" maxlength="1000" rows="2"></textarea>
+        </label>
+        <div class="form-buttons">
+          <button type="submit" id="portfolio-submit">Add portfolio</button>
+          <button type="button" id="portfolio-cancel" class="secondary" hidden>Cancel edit</button>
+        </div>
+        <p id="portfolio-message" class="message" role="status" hidden></p>
+      </form>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Notes</th><th>Actions</th></tr></thead>
+          <tbody id="portfolios-body"><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="portfolio-holdings-title">
+      <h2 id="portfolio-holdings-title">Investments in portfolios</h2>
+      <p class="muted">Pending investments are not included in your dashboard or net worth. Values shown are manually entered, not live quotes. <a href="/finances">Add an investment or assign an existing one on Finances</a>.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Portfolio</th><th>Investment</th><th>Quantity</th><th>Entered value</th><th>Status</th></tr></thead>
+          <tbody id="portfolio-holdings-body"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <details id="legacy-links" hidden>
+    <summary>Manage existing account links</summary>
+    <section class="panel" aria-labelledby="container-title">
+      <h2 id="container-title">Existing account links</h2>
+      <p class="muted">Each container groups one portfolio with one existing Account link. A linked Account
+        remains the existing ledger; its balance has not been classified as cash-only. Regrouping a container
+        is not a transfer. Archived containers still reserve their linked Account. No additional balance is stored.</p>
+      <form id="container-form" class="wide-form form-grid" hidden>
+        <label>Name <input name="name" required maxlength="100" autocomplete="off"></label>
+        <label>Portfolio
+          <select name="portfolio_id" required><option value="">Choose an active portfolio</option></select>
+        </label>
+        <label>Existing Account link
+          <select name="account_id" required><option value="">Choose an unlinked active Account</option></select>
+          <small class="muted">The Account link cannot be changed after creation. Create an Account on the Accounts page if needed.</small>
+        </label>
+        <label>Notes <span class="muted">(optional)</span>
+          <textarea name="notes" maxlength="1000" rows="2"></textarea>
+        </label>
+        <div class="form-buttons">
+          <button type="submit" id="container-submit">Add container</button>
+          <button type="button" id="container-cancel" class="secondary" hidden>Cancel edit</button>
+        </div>
+        <p id="container-message" class="message" role="status" hidden></p>
+      </form>
+      <p id="container-hint" class="muted" role="status"></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Portfolio</th><th>Linked Account (metadata only)</th><th>Notes</th><th>Actions</th></tr></thead>
+          <tbody id="containers-body"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    </details>
+
+    <section class="panel" id="reconciliation" aria-labelledby="reconciliation-title">
+      <h2 id="reconciliation-title">Investment reconciliation preview</h2>
+      <p class="muted">Review investments and the balances of any Accounts they may be associated with. This is a private, read-only comparison—not a conversion, trade, transfer, price update, approval, or change to your live dashboard. Original entered values are not live quotes. Nothing is saved by previewing, exporting, or cancelling.</p>
+      <div class="form-buttons">
+        <button type="button" id="reconciliation-start">Review existing investments</button>
+        <button type="button" id="reconciliation-cancel" class="secondary" hidden>Cancel and discard preview</button>
+      </div>
+      <p id="reconciliation-message" class="message" role="status" hidden></p>
+      <div id="reconciliation-workspace" hidden>
+        <form id="reconciliation-form" class="wide-form">
+          <h3>1. Match each original Investment</h3>
+          <p class="muted">Portfolio-first drafts already have a portfolio. Choose an Account for balance review, and verify the exact instrument and immutable specification. A ticker or name is not proof of identity. Leave uncertain items unresolved.</p>
+          <div id="reconciliation-sources"></div>
+          <h3>2. Review linked Account balances</h3>
+          <p class="muted">For each Account, say whether its existing ledger balance is cash only, includes investment values, or is unknown. For cash-only and combined balances, enter the cash portion in cents and attest to the complete set of Investments mapped to that Account. Cash-only balances do not include their values. An incomplete declaration blocks that Account group. No balance is changed.</p>
+          <div id="reconciliation-accounts"></div>
+          <div class="form-buttons"><button type="submit" id="reconciliation-preview">Calculate read-only preview</button></div>
+        </form>
+        <section id="reconciliation-report" aria-labelledby="reconciliation-report-title" hidden>
+          <h3 id="reconciliation-report-title">Comparison report</h3>
+          <p id="reconciliation-captured" class="muted"></p>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Backend total (USD)</th><th>Current</th><th>Proposed preview</th></tr></thead>
+            <tbody id="reconciliation-totals"></tbody>
+          </table></div>
+          <p id="reconciliation-delta"></p>
+          <h4>Per-Investment outcomes</h4>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Original Investment</th><th>Outcome and warnings</th><th>Original value provenance</th><th>Current value</th><th>Proposed legacy</th><th>Proposed holding</th><th>Original basis</th></tr></thead>
+            <tbody id="reconciliation-outcomes"></tbody>
+          </table></div>
+          <h4>Account corrections in preview</h4>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Account</th><th>Current balance</th><th>Proposed balance</th><th>Correction</th><th>Warnings</th></tr></thead>
+            <tbody id="reconciliation-account-results"></tbody>
+          </table></div>
+          <h4>Explanations and unresolved warnings</h4>
+          <ul id="reconciliation-explanations"></ul>
+          <ul id="reconciliation-warnings"></ul>
+          <p class="muted">A signed report is a snapshot, not permission to make changes. Verify freshness before using it. Export refuses stale snapshots.</p>
+          <div class="form-buttons">
+            <button type="button" id="reconciliation-verify" class="secondary">Check report freshness</button>
+            <button type="button" id="reconciliation-export" class="secondary">Export signed report JSON</button>
+          </div>
+          <p id="reconciliation-status" role="status"></p>
+        </section>
+      </div>
+    </section>
+  </main>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/portfolios.js"></script>
+  <script src="/static/js/reconciliation.js"></script>
+</body>
+</html>

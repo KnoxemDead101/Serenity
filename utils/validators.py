@@ -16,7 +16,7 @@ from decimal import Decimal
 
 MAX_TEXT_LENGTH = 100
 
-# A sanity limit that also keeps cents safely inside SQLite's integer range.
+# A sanity limit whose cents fit signed 64-bit PostgreSQL BIGINT and SQLite INTEGER.
 MAX_MONEY = Decimal("1000000000000")  # one trillion dollars
 
 

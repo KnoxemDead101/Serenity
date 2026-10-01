@@ -1,4 +1,4 @@
-"""Validation helpers for user-scoped financial records."""
+"""Validation helpers for workspace-scoped financial records."""
 
 OWNER_ID_MAX_LENGTH = 255
 

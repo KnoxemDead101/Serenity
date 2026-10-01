@@ -7,6 +7,9 @@ from schemas.timestamps import TimestampReadModel
 from utils.choices import BILL_FREQUENCIES, DEBT_TYPES
 from utils.validators import optional_text, require_choice, require_text, validate_money
 
+# Quantity uses 1e-8 units in a signed BIGINT column.
+MAX_INVESTMENT_QUANTITY = Decimal("1000000000")
+
 
 def validate_non_negative_money(value: Decimal, field_name: str) -> Decimal:
     value = validate_money(value, field_name)
@@ -26,6 +29,8 @@ def validate_rate(value: Decimal) -> Decimal:
 def validate_quantity(value: Decimal) -> Decimal:
     if not value.is_finite() or value < 0 or value.quantize(Decimal("0.00000001")) != value:
         raise ValueError("Quantity must be non-negative with at most 8 decimal places")
+    if value > MAX_INVESTMENT_QUANTITY:
+        raise ValueError("Quantity can be at most 1,000,000,000")
     return value
 
 
@@ -135,6 +140,8 @@ class DebtUpdate(DebtCreate):
 
 class InvestmentCreate(BaseModel):
     name: str
+    portfolio_id: int | None = None
+    investment_account_id: int | None = None
     ticker: str | None = None
     quantity: Decimal = Decimal("0")
     cost_basis: Decimal
@@ -169,6 +176,9 @@ class InvestmentCreate(BaseModel):
 
 class InvestmentRead(TimestampReadModel):
     id: int
+    portfolio_id: int | None
+    investment_account_id: int | None
+    review_pending: bool
     name: str
     ticker: str | None
     quantity: Decimal

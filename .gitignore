@@ -61,3 +61,14 @@ __pycache__/
 
 # Serenity runtime data
 *.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.dump
+*.backup
+*.bak
+/backups/
+.pgpass
+.pg_service.conf

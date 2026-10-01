@@ -89,6 +89,15 @@ def update_bill(
     )
 
 
+@router.delete("/bills/{bill_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bill(
+    bill_id: int,
+    user_id: str = Depends(require_session),
+    db: Session = Depends(get_db),
+):
+    finance_service.delete_bill(db, _require_bill(db, bill_id, user_id))
+
+
 @router.post("/bills/{bill_id}/deactivate", response_model=BillRead)
 def deactivate_bill(
     bill_id: int,
@@ -151,6 +160,15 @@ def update_debt(
     )
 
 
+@router.delete("/debts/{debt_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_debt(
+    debt_id: int,
+    user_id: str = Depends(require_session),
+    db: Session = Depends(get_db),
+):
+    finance_service.delete_debt(db, _require_debt(db, debt_id, user_id))
+
+
 @router.post("/debts/{debt_id}/deactivate", response_model=DebtRead)
 def deactivate_debt(
     debt_id: int,
@@ -179,9 +197,12 @@ def create_investment(
     user_id: str = Depends(require_session),
     db: Session = Depends(get_db),
 ):
-    return finance_service.to_investment_read(
-        finance_service.create_investment(db, data, user_id)
-    )
+    try:
+        return finance_service.to_investment_read(
+            finance_service.create_investment(db, data, user_id)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/investments", response_model=list[InvestmentRead])
@@ -212,10 +233,24 @@ def update_investment(
     user_id: str = Depends(require_session),
     db: Session = Depends(get_db),
 ):
-    return finance_service.to_investment_read(
-        finance_service.update_investment(
-            db, _require_investment(db, investment_id, user_id), data
+    try:
+        return finance_service.to_investment_read(
+            finance_service.update_investment(
+                db, _require_investment(db, investment_id, user_id), data
+            )
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.delete("/investments/{investment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_investment(
+    investment_id: int,
+    user_id: str = Depends(require_session),
+    db: Session = Depends(get_db),
+):
+    finance_service.delete_investment(
+        db, _require_investment(db, investment_id, user_id)
     )
 
 

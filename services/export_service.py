@@ -15,12 +15,14 @@ from models.debt import Debt
 from models.dependent import Dependent
 from models.income_profile import IncomeProfile
 from models.investment import Investment
+from models.instrument import Instrument, InstrumentSpecification
+from models.portfolio import InvestmentAccount, Portfolio
 from models.transaction import Transaction
 from models.transaction_correction import TransactionCorrection
 from services.ownership import require_owner_id
 from utils.money import cents_to_dollars, milli_to_percent, units_to_quantity
 
-EXPORT_FORMAT_VERSION = 1
+EXPORT_FORMAT_VERSION = 5
 
 
 def _iso(value) -> str | None:
@@ -154,9 +156,66 @@ def build_export(db: Session, owner_id: str) -> dict:
                 "current_value_cents": i.current_value_cents,
                 "current_value": _money(i.current_value_cents),
                 "notes": i.notes, "active": _active(i),
+                "investment_account_id": i.investment_account_id,
+                "portfolio_id": i.portfolio_id,
+                "review_pending": i.review_pending,
                 "created_at": _iso(i.created_at), "updated_at": _iso(i.updated_at),
             }
             for i in _all(db, Investment, owner_id)
+        ],
+        "portfolios": [
+            {
+                "id": p.id, "name": p.name, "notes": p.notes,
+                "active": p.active, "created_at": _iso(p.created_at),
+                "updated_at": _iso(p.updated_at),
+            }
+            for p in _all(db, Portfolio, owner_id)
+        ],
+        "investment_accounts": [
+            {
+                "id": container.id,
+                "portfolio_id": container.portfolio_id,
+                "account_id": container.account_id,
+                "name": container.name, "notes": container.notes,
+                "active": container.active,
+                "created_at": _iso(container.created_at),
+                "updated_at": _iso(container.updated_at),
+            }
+            for container in _all(db, InvestmentAccount, owner_id)
+        ],
+        # Reference metadata is separate from Investments (actual starting
+        # positions). Include every version so future historical calculations
+        # remain reproducible; values are integer units, not JSON floats.
+        "instruments": [
+            {
+                "id": i.id,
+                "symbol": i.symbol,
+                "active": i.active,
+                "created_at": _iso(i.created_at),
+                "updated_at": _iso(i.updated_at),
+            }
+            for i in _all(db, Instrument, owner_id)
+        ],
+        "instrument_specifications": [
+            {
+                "id": spec.id,
+                "instrument_id": spec.instrument_id,
+                "version": spec.version,
+                "symbol": spec.symbol,
+                "name": spec.name,
+                "asset_type": spec.asset_type,
+                "exchange": spec.exchange,
+                "currency": spec.currency,
+                "tick_size_units": spec.tick_size_units,
+                "point_value_units": spec.point_value_units,
+                "created_at": _iso(spec.created_at),
+            }
+            for spec in db.scalars(
+                select(InstrumentSpecification).join(Instrument).where(
+                    InstrumentSpecification.owner_id == owner_id,
+                    Instrument.owner_id == owner_id,
+                ).order_by(InstrumentSpecification.id)
+            )
         ],
         "income_profiles": [
             {

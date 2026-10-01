@@ -33,12 +33,12 @@ waitForPort = 8000
 name = "test"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pytest -q"
-
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/prepublish_check.sh"
 
 [postMerge]
 path = "scripts/post-merge.sh"

@@ -153,7 +153,8 @@ def test_missing_trust_configuration_fails_closed(clerk, monkeypatch):
     monkeypatch.delenv("SERENITY_AUTHORIZED_PARTIES")
     assert auth.verify_clerk_token(clerk["token"]()) is None
     monkeypatch.delenv("CLERK_PUBLISHABLE_KEY")
-    assert auth.verify_clerk_token(clerk["token"]()) is None
+    with pytest.raises(auth.ClerkUnavailableError):
+        auth.verify_clerk_token(clerk["token"]())
 
 
 @pytest.mark.parametrize("body", [b"not json", b"[]", b'{"keys": []}'])
@@ -170,7 +171,7 @@ def test_unavailable_jwks_fails_closed(real_auth_client, clerk, monkeypatch):
         raise urllib.error.URLError("offline")
     monkeypatch.setattr(auth.urllib.request, "build_opener", lambda *args:
                         SimpleNamespace(open=unavailable))
-    assert exchange(real_auth_client, clerk["token"]()).status_code == 401
+    assert exchange(real_auth_client, clerk["token"]()).status_code == 503
 
 
 def test_verified_users_have_isolated_accounts(real_auth_client, clerk):
@@ -214,7 +215,7 @@ def test_clerk_outage_and_owner_mismatch_fail_closed_after_handoff(real_auth_cli
     assert real_auth_client.get("/serenity-api/accounts").status_code == 401
     clerk["blocked"] = False
     clerk["offline"] = True
-    assert real_auth_client.get("/serenity-api/accounts").status_code == 401
+    assert real_auth_client.get("/serenity-api/accounts").status_code == 503
     clerk["offline"] = False
     assert real_auth_client.get("/serenity-api/accounts").status_code == 200
 

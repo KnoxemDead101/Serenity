@@ -1,0 +1,172 @@
+# Serenity — Profit Engine Architecture Review
+
+Date: 2026-09-29
+Scope: Response to the September 29 Profit Engine handoff. Based on direct inspection of the `Serenity` Replit app (models, services, schemas, api, auth, migrations, docs, tests) — not inferred from the handoff text.
+
+This is a review, not an implementation. No migrations, models, or app code were written or changed while producing this document.
+
+---
+
+## A. Current Repository Assessment
+
+Serenity is a FastAPI/SQLAlchemy app with a strict layering the code actually follows:
+
+```
+frontend/ (plain HTML/CSS/JS) → api/ → schemas/ → services/ → models/ → storage/
+```
+
+Confirmed domains and their files: Accounts (`models/account.py`, `services/account_service.py`), Transactions + correction history (`models/transaction.py`, `models/transaction_correction.py`, `services/transaction_service.py`), Bills/Debts/Investments (`models/bill.py`, `models/debt.py`, `models/investment.py`, `services/finance_service.py`), Businesses/Dependents (label-only tagging), Income Profiles (planned income, not posted transactions), Dashboard (`services/dashboard_service.py` — a pure combiner, no storage of its own), Export (`services/export_service.py` — full lossless JSON + a transaction CSV), and Identity/Workspace (`models/identity.py`, `services/identity_service.py`, `auth.py`).
+
+Money is signed 64-bit integer cents everywhere (migration `0013_money_bigint` widened all 11 `_cents` columns). Investment quantity is a BigInteger scaled ×100,000,000 (migration `0012`), giving exact 8-decimal fractional shares. Interest rates are stored as thousandths of a percent. All timestamps are timezone-aware UTC.
+
+Ownership: every financial table has a plain indexed `owner_id: String` column (not a foreign key to `workspaces` — deliberately, because a SQLite table rebuild to add an FK would drop existing expression indexes). Every service function takes `owner_id` and calls `services.ownership.require_owner_id()` before querying. `Workspace`/`SerenityUser`/`AuthIdentity` (migration `0011`) map a verified Clerk `(issuer, subject)` to one workspace per user.
+
+Auth (`auth.py`) verifies Clerk's RS256 token (signature, issuer, `azp` origin, required claims), then checks the *live* Clerk session over the network on every protected request (fails closed on any Clerk outage), then issues a signed HttpOnly cookie bound to that exact session. This is unusually careful and should not be touched by Profit Engine work.
+
+13 Alembic migrations exist, all conservative: widen columns rather than narrow them, guard destructive/sensitive migrations behind explicit environment-variable confirmations (`0011`'s `SERENITY_LEGACY_CLERK_ISSUER`), and check for overflow before any downgrade. `docs/CHAT_HANDOFF.md` and `docs/auth-verification.md` are explicit that **production sign-in is not yet end-to-end verified** — this is real, current, unresolved work, independent of the Profit Engine.
+
+One finding worth flagging directly: `utils/calculations.py` exists but is currently **empty**. It's a natural home for trading math, but I'm not assuming that's its intended purpose — see Decision 7 below.
+
+## B. Existing Architecture That Can Be Reused
+
+These are proven patterns, not just "things that exist" — reuse them as-is rather than inventing parallel conventions:
+
+- **`owner_id` + `require_owner_id()`** — the exact ownership pattern on `Investment`, `Bill`, `Debt`, `Account`. Every new Profit Engine table should copy this column, its index (`Index("ix_<table>_owner_id", "owner_id")`), and the guard call verbatim.
+- **`utils/money.py`** — `dollars_to_cents`/`cents_to_dollars`, `percent_to_milli`/`milli_to_percent`, and especially `quantity_to_units`/`units_to_quantity` (the 1e-8 scaled-integer quantity representation already proven by `test_investment_quantity.py` up to `1,000,000,000` units). Portfolio Holdings should use this exact function, not a new one.
+- **Active/lifecycle pattern** — `active` boolean + explicit owner-scoped permanent DELETE (bills/debts/investments), vs. append-only soft-delete with correction snapshots (transactions). Profit Engine entities will need to pick one of these two lifecycles per entity — see Section H.
+- **`transaction_corrections`' before/after JSON snapshot** — the existing precedent for "never overwrite reasoning, append a snapshot instead." Directly reusable for Analysis Revision History (§17 of the handoff).
+- **Single-formula totals** (`total_balance_cents`, `total_investment_value_cents`, `normalized_monthly_bill_total_cents`) — each total has exactly one function. Every new Profit Engine total (open quantity, realized P&L, net worth contribution) must follow this, not be recomputed ad hoc in a route or the frontend.
+- **`dashboard_service.get_dashboard_summary`** — a ~15-line pure combiner that calls other services and does no independent storage or calculation beyond net worth. This is the template for the Attention Engine (Section I).
+- **`services/transaction_service._resolve_business()`** — checks `Business.owner_id == owner_id` before allowing a transaction to link to it. This is the specific, already-implemented pattern for preventing cross-workspace ID injection through a relationship, and it must be replicated for every new Profit Engine relationship (Trade→Plan, Fill→Trade, Holding→Portfolio, etc).
+- **`tests/test_owner_isolation.py`** — a ready template (create as owner-a, sign in as owner-b, assert 404/empty everywhere, including export and dashboard) to extend per new domain.
+- **`export_service.build_export()`** — flat, owner-scoped, includes inactive/deleted rows. New domains slot in as new keys.
+
+## C. Conflicts / Technical Debt / Loose Ends
+
+- `utils/calculations.py` is empty. Confirm intent before building trading math on top of (or instead of) it.
+- `Transaction.transaction_type` only supports `Income`/`Expense` today — `docs/data-model.md` explicitly notes "Transfer is deferred." This is the single biggest technical gap standing between the current app and the handoff's Checking→Brokerage→Trading flow (§12). It is not solved by anything currently in the repo.
+- The `Investment` model's own docstring already calls it a "TEMPORARY starting-position model" awaiting the Portfolio milestone — the repository already agrees with the handoff's framing, which lowers migration risk.
+- No FK from financial tables to `workspaces` (by design, per `docs/identity.md`, to avoid SQLite expression-index rebuilds). New Profit Engine tables should follow the same plain-indexed-column convention for consistency, not introduce FKs inconsistently.
+- Production auth verification, invitation lifecycle, profile/settings, and PIN quick-unlock are all explicitly open per `docs/CHAT_HANDOFF.md` (Sept 24) and must stay visible on the roadmap — none of them are touched or resolved by this review, and Profit Engine work should not bury them.
+- I did not find a CI configuration file in the top-level listing; I didn't chase this further since it's outside this review's scope, but it's worth confirming separately whether `pytest`/browser tests run automatically anywhere besides local/manual `prepublish_check.sh`.
+
+## D. Current Investment Migration Recommendation
+
+The current `Investment` table (`name`, `ticker`, `quantity_units`, `cost_basis_cents`, `current_value_cents`, `active`) is a flat starting-position record: no activity history, no account linkage, no lot-level detail.
+
+**Recommendation: do not delete or silently transform it.** When Holdings/Investment Activity ship (Phase 2):
+
+1. Leave the `investments` table and its rows exactly as they are — same treatment the project already gives deactivated bills/debts (kept until an owner explicitly deletes them).
+2. Write one small, explicitly guarded Alembic migration (mirroring `0011`'s confirmation-gate pattern) that, for each **active** `Investment` row, creates: one `Portfolio` (a default one if the workspace has none), one `Holding` inside it, and one initial `InvestmentActivity` of type `CONTRIBUTION` or `BUY` dated at migration time, with quantity = `quantity_units` and a derived unit cost from `cost_basis_cents / quantity_units`, so the new derived cost basis matches the old typed-in value exactly at the moment of migration.
+3. Stop reading from `investments` in the dashboard/finance summary once Holdings exist for a workspace, but keep the rows and keep them in exports — this matches the project's existing philosophy that deletion is explicit and separate from "no longer used by new features."
+4. Inactive `Investment` rows already contribute nothing to totals. Whether to migrate them too, skip them, or ask Leighton per-record is a real product decision — see Decision 4.
+
+## E. Proposed Profit Engine Domain Model
+
+Every table below gets the same treatment as `Investment`/`Bill`/`Debt`: `owner_id: String(255)` + `Index("ix_<table>_owner_id", "owner_id")` + `require_owner_id()` in every service function.
+
+```
+Portfolio        (owner_id, name)
+InvestmentAccount(owner_id, portfolio_id, account_id NULLABLE — see Section G)
+Instrument       (symbol, asset_class; ownership scope is Decision 3)
+InstrumentSpecVersion (instrument_id, tick_size_units, tick_value_cents, point_value_cents, effective_at)
+Holding          (owner_id, investment_account_id, instrument_id)          — quantity/cost DERIVED, not stored
+InvestmentActivity(owner_id, holding_id, instrument_id, activity_type, quantity_units, price_cents, fees_cents, date, transfer_id NULLABLE)
+TradingAccount   (owner_id, account_type: PERSONAL_FUNDED | PROP_FIRM | SIMULATION, label, status)
+MarketAnalysis   (owner_id, instrument_id, created_at, intended_date, bias, notes)
+AnalysisRevision (analysis_id, revised_at, notes)                          — append-only, mirrors transaction_corrections
+MarketLevel      (owner_id, instrument_id, kind: level|zone, status: ACTIVE|TESTED|INVALIDATED|ARCHIVED)
+TradingDay       (owner_id, date, analysis_id NULLABLE, plan_id NULLABLE)  — valid with zero trades
+TradingPlan      (owner_id, trading_day_id NULLABLE, instrument_id, planned_entry/stop/target, planned_quantity, max_risk_cents, notes)
+Trade            (owner_id, trading_day_id NULLABLE, plan_id NULLABLE, instrument_spec_version_id, direction, status DERIVED from fills)
+TradeFill        (owner_id, trade_id, side, price_cents, quantity, fees_cents, filled_at)  — append-only, never edited
+TradeReview      (owner_id, trade_id, followed_setup, followed_risk, notes)
+TradingDayJournal(owner_id, trading_day_id, notes)
+```
+
+`Trade.status` (PLANNED/OPEN/PARTIALLY_CLOSED/CLOSED) and `open_quantity` must be **calculated from `TradeFill` rows**, never stored as an independently editable column — the same rule `calculate_current_balance_cents()` already enforces for account balances.
+
+## F. Instrument + Trading Math Design
+
+**Historical reproducibility (handoff Q9/Q26):** recommend immutable versioned rows — `InstrumentSpecVersion` — rather than mutable specs or silent snapshotting. Every `Trade` stores a hard FK to the specific `instrument_spec_version_id` in effect when it was opened, not just to `Instrument`. This is the same principle behind `transaction_corrections`: a past record's meaning must never change because something else changed later.
+
+**Fractional shares:** reuse `utils/money.py`'s `quantity_to_units`/`units_to_quantity` unchanged — it's already validated at the precision and range the handoff asks for (8 decimals, BigInteger, tested to the billion-unit cap).
+
+**Trading math:** a new module (`utils/trading_math.py`, pending Decision 7 on the empty `calculations.py`) with pure, side-effect-free functions in the same style as `utils/money.py`:
+
+- `ticks_between(price_a, price_b, tick_size_units) -> int`
+- `dollar_value(ticks: int, tick_value_cents: int, contracts: int, direction: int) -> int` — `direction` is `+1`/`-1`, so long and short share one function rather than duplicated branches
+- `gross_pnl_cents`, `net_pnl_cents` (after fees), `planned_risk_cents`, `planned_reward_cents`, `planned_r`, `realized_r`
+
+All integer in, integer out; `Decimal` only at the API boundary — identical discipline to `utils/money.py`. Tests must explicitly cover mini vs. micro contracts and long vs. short with different instruments, per the handoff's explicit requirement (§24) that `1 point = $1` must never be assumed.
+
+## G. Portfolio Design
+
+**Portfolio: persisted, not purely calculated.** The handoff's example ("Children's Investments" containing two child sub-portfolios) can't be reconstructed from `Account` alone, so `Portfolio` needs to be a real table. For the single-portfolio user, auto-create one default `Portfolio` per workspace on first use so no portfolio-management UI is ever forced on them.
+
+**InvestmentAccount vs. extending `Account`: recommend a new `InvestmentAccount` table, optionally linked to an existing `Account` via a nullable FK**, rather than extending `Account` directly. Reasoning from the actual code: `calculate_current_balance_cents()` derives balance strictly from `opening_balance_cents + Income − Expense` transactions. Holdings valuation is a fundamentally different derivation (sum of activity × price). Overloading `Account` would force either fake transactions to represent holdings changes, or a balance formula that branches by account type — both add hidden complexity to a formula that today has exactly one meaning. A separate `InvestmentAccount` lets an existing `Account` still represent the *cash sleeve* of a brokerage relationship (e.g. uninvested cash) while `InvestmentAccount`/`Holding` represents the *invested* sleeve, with net worth summing both without double-counting. **This changes net-worth composition and is listed as Decision 1 — not decided here.**
+
+**Transfers (Checking → Brokerage → Trading):** `Transaction.transaction_type` doesn't have a `Transfer` type yet (confirmed in `models/transaction.py` and `docs/data-model.md`). Recommend adding one first-class `Transfer` transaction type (not two paired Income/Expense rows, which the project's own docs already warn look like fake income), with a nullable `transfer_id`/reference on `InvestmentActivity.CONTRIBUTION` rows so a cash movement and its corresponding portfolio contribution can be linked without ever being summed twice. **This is a real schema decision — Decision 2.**
+
+**Valuation:** `Holding` quantity and cost basis are derived by summing `InvestmentActivity` rows in a service function (one formula, like `total_balance_cents`), never stored as independently editable fields.
+
+## H. Trading Workflow Design
+
+```
+MarketAnalysis (+ AnalysisRevision history)
+      → MarketLevel/Zone (persists across days; lifecycle ACTIVE→TESTED→INVALIDATED→ARCHIVED)
+      → TradingPlan (references analysis/levels; valid with no resulting trade)
+      → TradingDay (valid with zero trades — "analysis done, setup never appeared" is real history)
+      → Trade (references plan optionally)
+           → TradeFill (append-only; status/open-quantity always derived)
+      → TradeReview / TradingDayJournal (domain-specific structured tables, not one generic notes blob)
+```
+
+Recommend **one `MarketLevel` model with a `kind` field (`level` | `zone`)** rather than two parallel models — they share the exact same lifecycle and fields, and the project already prefers one table per real distinction rather than one per label (see `BILL_FREQUENCIES`/`DEBT_TYPES` as plain choice lists rather than subclassed models). This is a recommendation, not something to lock in silently — see Decision 5.
+
+Journaling: recommend **domain-specific tables** (`TradeReview`, `TradingDayJournal`, and later a general journal if needed) rather than one shared polymorphic `Journal` table, matching the project's consistent one-table-per-domain style (Bills, Debts, Investments are three tables, not one `FinancialItem` table with a type column). This is a real architectural trade-off — Decision 6.
+
+## I. Attention/Timeline Design
+
+`dashboard_service.get_dashboard_summary()` is the template: it calls `account_service` and `finance_service` and combines their output; it stores nothing of its own beyond the net-worth formula. The Attention Engine should be built the same way — a service function that queries existing domain tables directly for what's relevant *today* (bills due soon, `MarketLevel`s not reviewed recently, today's `TradingDay`/`TradingPlan` status) and returns a computed summary. It must never create a separate `Reminder`/`CalendarEvent` row that duplicates a fact a domain table already owns (a bill's `due_date`, a level's `status`) — this is already Serenity's stated development rule ("store authoritative facts and calculate derived results"), just applied to a new consumer.
+
+## J. Security / Workspace Isolation Review
+
+Every new table: `owner_id` column, `ix_<table>_owner_id` index, `require_owner_id()` in every service function — identical to existing domains, no exceptions. Every new **relationship** (`Trade.plan_id`, `Fill.trade_id`, `Holding.portfolio_id`, `InvestmentActivity.holding_id`) must be resolved the way `_resolve_business()` resolves a business link: look the referenced row up scoped to the *same* `owner_id`, and reject the request if it doesn't match, rather than trusting a bare foreign key. This is the one existing pattern that specifically prevents a cross-workspace ID injection attack, and every new relationship needs it individually — it isn't automatic.
+
+Recommend extending `test_owner_isolation.py`'s pattern (seed as owner-a, switch to owner-b, assert 404/empty on every read/write/export/dashboard path) once per new domain as it ships, rather than trying to write one universal test file up front.
+
+## K. Data Ownership / Export / Backup Impact
+
+`export_service.build_export()` is a manually maintained dict — each new owner-scoped model needs an explicit new key, exactly like the existing `accounts`/`bills`/`debts`/`investments` keys. Recommend a test that enumerates every model with an `owner_id` column and asserts it appears in the export output, so a forgotten domain fails CI instead of silently missing backups. The native pg_dump/SQLite-backup rehearsal in `BACKUP_RESTORE.md` is schema-level and needs no Profit-Engine-specific change beyond re-running it after each new migration.
+
+## L. Performance Review
+
+New indexes: `ix_<table>_owner_id` on every new table (mandatory); compound `(owner_id, instrument_id)` for analysis/level lookups; `(owner_id, date)` on `TradingDay`; `(trade_id)` on `TradeFill`. The existing dashboard pattern loads full row sets into Python and sums them in memory (fine today because bills/debts/investments are naturally small per workspace) — that assumption will **not** hold for `Trade`/`TradeFill`/`MarketAnalysis` history, so historical listing endpoints for those specifically need pagination and date/instrument filtering from their first version, not as a later optimization.
+
+## M. Migration Strategy
+
+Follow the existing style exactly: one small, hand-reviewed Alembic revision per model addition (autogenerate, then review, per `docs/architecture.md`'s stated workflow), widen rather than narrow columns, and guard any data-transforming migration (the Investment→Holdings conversion, Section D) behind an explicit environment-variable confirmation and a required backup, the same way `0011` gates on `SERENITY_LEGACY_CLERK_ISSUER`. No Profit Engine migration should touch `accounts`, `transactions`, or existing financial tables except to eventually add the `Transfer` transaction type (Decision 2), which itself should be its own small, isolated migration.
+
+## N. Testing Plan
+
+Mirror the existing file layout: `test_<domain>_service.py`, `test_<domain>_api.py`, ownership tests extending the `test_owner_isolation.py` pattern per domain, and migration tests following `test_investment_quantity.py`'s upgrade/downgrade-without-touching-rows shape. Add a dedicated `test_trading_math.py` covering, at minimum: mini vs. micro contracts, long vs. short, single/multiple entries and exits, weighted-average entry/exit, over-exit rejection, and PostgreSQL-specific numeric-precision tests wherever BigInteger boundary behavior matters (mirroring `test_money_postgres.py`).
+
+## O. Recommended Implementation Phases
+
+The handoff's Phase 0–7 sequence matches what the repository actually supports well: money/quantity precision is already solid and directly reusable, the ownership pattern is already solid and directly reusable, and the dashboard-as-combiner pattern is already solid and directly reusable. **Endorsed as-is**, with one sequencing note: do the Investment→Holdings migration (Phase 2) only after Phase 1's trading-math/valuation conventions are fully tested, so Holdings valuation and Trading P&L calculation share one "how do we derive value from facts" convention instead of two independently invented ones.
+
+## P. Decisions Requiring Human Approval
+
+Not decided here — returned to Leighton, per the handoff's own instruction not to silently choose:
+
+1. **InvestmentAccount as a new linked table vs. extending `Account` directly** (Section G) — changes net-worth composition.
+2. **Adding a first-class `Transfer` transaction type** to model Checking→Brokerage→Trading movement without double-counting (Section G) — `Transaction` currently only supports Income/Expense.
+3. **Whether `Instrument` is a shared global catalog or a per-workspace owned table.** The handoff doesn't settle this, and it has real isolation implications: a shared catalog isn't a "financial record" in the same sense as everything else in this app, and one workspace's data entry would affect another's reads.
+4. **What happens to existing Investment rows (especially inactive ones) during the Holdings migration** — auto-convert everything, skip inactive rows, or require per-record confirmation from Leighton before conversion.
+5. **One `MarketLevel` model with a `kind` field vs. two separate `Level`/`Zone` models** (Section H) — a modeling call with a clear recommendation but not something to lock in unilaterally.
+6. **Domain-specific journal tables vs. one shared polymorphic `Journal` table** (Section H).
+7. **What to do with the currently-empty `utils/calculations.py`** — repurpose it for trading math, leave it alone and add a new module, or delete it.
+8. **The exact guard mechanism for the Investment migration** — an explicit environment-variable confirmation like `0011`'s, a manual per-record UI review step, or something else.
+
+Separately, and explicitly unaffected by this review: production auth end-to-end verification, invitation-lifecycle design, profile/settings, and PIN quick-unlock remain open per `docs/CHAT_HANDOFF.md` and are not resolved or superseded by anything above.

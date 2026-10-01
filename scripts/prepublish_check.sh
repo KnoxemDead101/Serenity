@@ -1,33 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "${SERENITY_DEVELOPMENT_DATABASE:-}" != "1" ]]; then
-  echo "Refusing to run: set SERENITY_DEVELOPMENT_DATABASE=1 explicitly." >&2
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+# Never migrate a caller-selected database. PostgreSQL tests create and destroy
+# their own private cluster; all other database fixtures are isolated as well.
+export DATABASE_URL=sqlite://
+for variable in ${!PG@}; do unset "$variable"; done
+export SERENITY_REQUIRE_POSTGRES=1
+export SERENITY_REQUIRE_BROWSER=1
+
+for tool in initdb postgres alembic python pytest; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "Required test tool missing: $tool. Restore the declared Replit dependencies before publishing." >&2
+    exit 1
+  fi
+done
+if ! command -v chromium >/dev/null 2>&1 &&
+   ! command -v chromium-browser >/dev/null 2>&1 &&
+   ! command -v google-chrome >/dev/null 2>&1; then
+  echo "Required browser test tool missing: Chromium." >&2
   exit 1
 fi
-if [[ "${DATABASE_URL:-}" != postgresql://* && "${DATABASE_URL:-}" != postgres://* ]]; then
-  echo "Refusing to run: DATABASE_URL must point to development PostgreSQL." >&2
+# Browser modules use importorskip, so check the import before collection.
+python -c 'import psycopg; import playwright.sync_api' || {
+  echo "Required test dependency missing: psycopg or Playwright." >&2
   exit 1
-fi
-
-echo "Applying migrations to the explicitly selected development database..."
-alembic upgrade head
-
-read_revisions() {
-  "$@" 2>/dev/null | grep -Eo 'Rev: [^ ]+' | cut -d' ' -f2 | sort -u
 }
-mapfile -t current < <(read_revisions alembic current --verbose)
-mapfile -t heads < <(read_revisions alembic heads --verbose)
-if ((${#current[@]} == 0 || ${#heads[@]} == 0)) ||
-   ! diff -u <(printf '%s\n' "${current[@]}") <(printf '%s\n' "${heads[@]}") >/dev/null; then
-  printf 'Migration mismatch. current: %s; heads: %s\n' \
-    "${current[*]:-none}" "${heads[*]:-none}" >&2
-  exit 1
-fi
 
-echo "Running tests..."
-echo "Verifying browser tests are available..."
-SERENITY_REQUIRE_BROWSER=1 pytest --collect-only -q \
-  tests/test_responsive_browser.py tests/test_income_browser.py
-SERENITY_REQUIRE_BROWSER=1 pytest -q
-echo "Development checks passed. Publish still manages the production schema."
+echo "Running required disposable PostgreSQL and browser checks..."
+pytest -q
+echo "Isolated prepublish checks passed. No existing database was migrated."

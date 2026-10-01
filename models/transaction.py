@@ -18,7 +18,7 @@ Rules that keep the numbers trustworthy:
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.account import Account, utc_now
@@ -41,7 +41,7 @@ class Transaction(Base):
     date: Mapped[date] = mapped_column(Date, nullable=False)
     transaction_type: Mapped[str] = mapped_column(String(20), nullable=False)
     classification: Mapped[str] = mapped_column(String(50), nullable=False)
-    amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     # The reason money moved (required) and optional details about where.
     description: Mapped[str] = mapped_column(String(200), nullable=False)

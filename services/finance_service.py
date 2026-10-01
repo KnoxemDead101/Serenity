@@ -14,8 +14,10 @@ from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
 
 from models.bill import Bill
+from models.account import Account
 from models.debt import Debt
 from models.investment import Investment
+from models.portfolio import InvestmentAccount, Portfolio
 from schemas.finance import (
     BillCreate,
     BillRead,
@@ -94,6 +96,12 @@ def update_bill(db: Session, bill: Bill, data: BillUpdate) -> Bill:
     return bill
 
 
+def delete_bill(db: Session, bill: Bill) -> None:
+    """Permanently remove an already owner-scoped bill."""
+    db.delete(bill)
+    db.commit()
+
+
 def set_bill_active(db: Session, bill: Bill, active: bool) -> Bill:
     bill.active = active
     db.commit()
@@ -162,6 +170,12 @@ def update_debt(db: Session, debt: Debt, data: DebtUpdate) -> Debt:
     return debt
 
 
+def delete_debt(db: Session, debt: Debt) -> None:
+    """Permanently remove an already owner-scoped debt."""
+    db.delete(debt)
+    db.commit()
+
+
 def set_debt_active(db: Session, debt: Debt, active: bool) -> Debt:
     debt.active = active
     db.commit()
@@ -190,8 +204,18 @@ def to_debt_read(debt: Debt) -> DebtRead:
 # ---------------------------------------------------------------------------
 
 def create_investment(db: Session, data: InvestmentCreate, owner_id: str) -> Investment:
+    owner_id = require_owner_id(owner_id)
+    if data.portfolio_id is not None and data.investment_account_id is not None:
+        raise ValueError("Choose a portfolio directly or an existing account link, not both")
+    if data.portfolio_id is not None:
+        require_active_portfolio(db, owner_id, data.portfolio_id)
+    if data.investment_account_id is not None:
+        require_active_investment_container(db, owner_id, data.investment_account_id)
     investment = Investment(
-        owner_id=require_owner_id(owner_id),
+        owner_id=owner_id,
+        portfolio_id=data.portfolio_id,
+        investment_account_id=data.investment_account_id,
+        review_pending=data.portfolio_id is not None or data.investment_account_id is not None,
         name=data.name,
         ticker=data.ticker.upper() if data.ticker else None,
         quantity_units=quantity_to_units(data.quantity),
@@ -203,6 +227,35 @@ def create_investment(db: Session, data: InvestmentCreate, owner_id: str) -> Inv
     db.commit()
     db.refresh(investment)
     return investment
+
+
+def require_active_portfolio(db: Session, owner_id: str, portfolio_id: int) -> Portfolio:
+    portfolio = db.scalar(select(Portfolio).where(
+        Portfolio.owner_id == require_owner_id(owner_id),
+        Portfolio.id == portfolio_id,
+        Portfolio.active.is_(True),
+    ).with_for_update().execution_options(populate_existing=True))
+    if portfolio is None:
+        raise ValueError("Active portfolio not found")
+    return portfolio
+
+
+def require_active_investment_container(db: Session, owner_id: str, container_id: int) -> InvestmentAccount:
+    container = db.scalar(select(InvestmentAccount).join(
+        Portfolio,
+        (Portfolio.id == InvestmentAccount.portfolio_id) &
+        (Portfolio.owner_id == InvestmentAccount.owner_id),
+    ).join(Account, (Account.id == InvestmentAccount.account_id) &
+           (Account.owner_id == InvestmentAccount.owner_id)).where(
+        InvestmentAccount.owner_id == require_owner_id(owner_id),
+        InvestmentAccount.id == container_id,
+        InvestmentAccount.active.is_(True),
+        Portfolio.active.is_(True),
+        Account.active.is_(True),
+    ))
+    if container is None:
+        raise ValueError("Active investment container not found")
+    return container
 
 
 def list_investments(db: Session, owner_id: str) -> list[Investment]:
@@ -221,6 +274,25 @@ def get_investment(db: Session, investment_id: int, owner_id: str) -> Investment
 def update_investment(
     db: Session, investment: Investment, data: InvestmentUpdate
 ) -> Investment:
+    if investment.review_pending:
+        if investment.portfolio_id is not None:
+            if data.investment_account_id is not None:
+                raise ValueError("Account assignment belongs in the review, not investment entry")
+            target = data.portfolio_id if data.portfolio_id is not None else investment.portfolio_id
+            require_active_portfolio(db, investment.owner_id, target)
+            investment.portfolio_id = target
+        elif data.portfolio_id is not None or (data.investment_account_id is not None and data.investment_account_id != investment.investment_account_id):
+            raise ValueError("A pending investment's container cannot be changed; cancel and create a new draft")
+        else:
+            require_active_investment_container(db, investment.owner_id, investment.investment_account_id)
+    elif data.investment_account_id is not None:
+        raise ValueError("Existing account links must use the reviewed reconciliation flow")
+    else:
+        # Organize a legacy investment without changing its counted status.
+        # No account meaning, holding conversion, or valuation is inferred.
+        if data.portfolio_id is not None and data.portfolio_id != investment.portfolio_id:
+            require_active_portfolio(db, investment.owner_id, data.portfolio_id)
+        investment.portfolio_id = data.portfolio_id
     investment.name = data.name
     investment.ticker = data.ticker.upper() if data.ticker else None
     investment.quantity_units = quantity_to_units(data.quantity)
@@ -230,6 +302,12 @@ def update_investment(
     db.commit()
     db.refresh(investment)
     return investment
+
+
+def delete_investment(db: Session, investment: Investment) -> None:
+    """Permanently remove an already owner-scoped investment."""
+    db.delete(investment)
+    db.commit()
 
 
 def set_investment_active(db: Session, investment: Investment, active: bool) -> Investment:
@@ -242,6 +320,9 @@ def set_investment_active(db: Session, investment: Investment, active: bool) -> 
 def to_investment_read(investment: Investment) -> InvestmentRead:
     return InvestmentRead(
         id=investment.id,
+        portfolio_id=investment.portfolio_id,
+        investment_account_id=investment.investment_account_id,
+        review_pending=investment.review_pending,
         name=investment.name,
         ticker=investment.ticker,
         quantity=units_to_quantity(investment.quantity_units),
@@ -264,7 +345,7 @@ def total_investment_value_cents(investments: Iterable[Investment]) -> int:
     return sum(
         investment.current_value_cents
         for investment in investments
-        if is_active(investment)
+        if is_active(investment) and not investment.review_pending
     )
 
 
@@ -306,7 +387,7 @@ def get_finance_summary(db: Session, owner_id: str) -> FinanceSummary:
         ),
         debt_count=sum(1 for debt in debts if is_active(debt)),
         debt_balance=cents_to_dollars(total_debt_balance_cents(debts)),
-        investment_count=sum(1 for investment in investments if is_active(investment)),
+        investment_count=sum(1 for investment in investments if is_active(investment) and not investment.review_pending),
         investment_value=cents_to_dollars(
             total_investment_value_cents(investments)
         ),

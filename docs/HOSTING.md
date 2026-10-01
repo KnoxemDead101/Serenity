@@ -26,13 +26,14 @@ Linux host. This is an operator checklist, **not** a tested external deployment.
    in production (it enables insecure cookies and preview-origin handling).
    **Hosting migration blocker:** Replit's managed Clerk tenant cannot be
    exported to an independent host. Set up a separately supported Clerk
-   instance before an external deployment. Existing users and their Clerk
-   identifiers do **not** automatically migrate: financial rows are keyed by
-   the old Clerk user ID. Plan and verify an explicit, audited ownership
-   migration from old IDs to new IDs, with account-owner consent and a
-   rollback backup; do not relink users by matching email addresses. Do not
-   expose existing financial data on the new host until identity mapping is
-   verified. Browser sign-in also depends on `@clerk/ui` and `@clerk/clerk-js`
+   instance before an external deployment. Financial rows are owned by
+   Serenity workspace IDs after migration 0011. To retain existing users'
+   access, migrate the **auth identity mappings** from the old Clerk issuer
+   and subject to independently verified new provider identities, with
+   account-owner consent, an audited mapping and a rollback backup. Do not
+   reassign a workspace by matching email addresses. Do not expose existing
+   financial data on the new host until identity mapping is verified.
+   Browser sign-in also depends on `@clerk/ui` and `@clerk/clerk-js`
    browser scripts loaded from jsDelivr by `frontend/static/js/auth.js`.
 5. Keep all secrets and DB files out of source control and logs. `.env.example`
    describes variables; the app does **not** automatically read `.env`.
@@ -61,6 +62,18 @@ header trust for untrusted clients; only configure forwarded headers for your
 own proxy. The default `/docs` is public API documentation; limit access at
 the proxy if exposing that metadata is inappropriate for your deployment.
 
+Before applying migration 0011 to a database with pre-existing financial
+records, inspect every distinct owner ID and establish that each is a subject
+of the exact configured Clerk issuer. Back up and verify restore first. Only
+then set `SERENITY_LEGACY_CLERK_ISSUER` to that exact HTTPS issuer for the
+migration; without it migration aborts before altering schema or rows. If
+owners have mixed or unknown origins, do not set it or run the migration;
+prepare an individually audited mapping instead. This setting is **not**
+needed for an empty database. See `docs/identity.md`. Check for orphan
+workspace owners before publishing. Downgrades involving populated identity
+tables require an explicit backup and confirmation and reject ambiguous
+identity mappings; restoring a verified backup is safer.
+
 Run `SERENITY_CHECK_PUBLISHED_ORIGIN=https://your-real-app.example
 python scripts/check_production_auth.py` with the configured origin and
 `SERENITY_AUTHORIZED_PARTIES` before opening access. This checks configuration,
@@ -70,12 +83,18 @@ financial records. See `docs/auth-verification.md`.
 
 ## Recovery, backups, and limitations
 
+See [the database-native backup/restore rehearsal](BACKUP_RESTORE.md) for
+repeatable disposable SQLite and PostgreSQL checks and the isolated-destination
+operator recovery procedure. Run it before relying on backups; JSON/CSV exports
+are not a substitute.
+
 - Take encrypted, tested database backups; restore into an isolated database
   first and check migrations and owner-scoped records. JSON/CSV export is **not**
   a database restore mechanism. Never overwrite a populated production
   database with the development SQLite file.
-- The app does not include a self-contained database provisioning, automated
-  restore procedure, or user-ownership migration between Clerk tenants.
+- The rehearsal provisions only disposable databases. The app does not include
+  production database provisioning, scheduled encrypted backups, automated
+  production recovery, or automatic identity-mapping migration between Clerk tenants.
   PostgreSQL migrations have been designed through Alembic, but external-host
   runtime, TLS and independent Clerk sign-in are not proven by local tests.
   Test on the intended server before relying on it.

@@ -8,7 +8,14 @@ import sys
 
 def run_alembic(database_path, *args, extra_env=None):
     """Run an Alembic command against a fresh SQLite file."""
-    env = {**os.environ, "DATABASE_URL": f"sqlite:///{database_path}"}
+    # Historical fixtures declare one synthetic Clerk tenant explicitly.
+    # Production migrations NEVER receive these test-only confirmations.
+    from conftest import TEST_CLERK_ISSUER
+    env = {
+        **os.environ, "DATABASE_URL": f"sqlite:///{database_path}",
+        "SERENITY_LEGACY_CLERK_ISSUER": TEST_CLERK_ISSUER,
+        "SERENITY_CONFIRM_WORKSPACE_DOWNGRADE": "1",
+    }
     env.update(extra_env or {})
     result = subprocess.run(
         [sys.executable, "-m", "alembic", *args],
@@ -19,6 +26,68 @@ def run_alembic(database_path, *args, extra_env=None):
 
 def index_names(connection, table):
     return {row[1] for row in connection.execute(f"PRAGMA index_list({table})")}
+
+
+def test_0011_refuses_populated_database_without_verified_issuer(tmp_path):
+    path = tmp_path / "owners.db"
+    run_alembic(path, "upgrade", "0010_income_profiles")
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "INSERT INTO accounts (name, account_type, classification, "
+            "opening_balance_cents, active, created_at, updated_at, owner_id) "
+            "VALUES ('private', 'Checking', 'Personal', 0, 1, CURRENT_TIMESTAMP, "
+            "CURRENT_TIMESTAMP, 'legacy-user')"
+        )
+    for issuer in ("", "https://wrong.example.test", "http://serenity-test.clerk.example"):
+        env = {
+            **os.environ, "DATABASE_URL": f"sqlite:///{path}",
+            "SERENITY_LEGACY_CLERK_ISSUER": issuer,
+        }
+        result = subprocess.run([sys.executable, "-m", "alembic", "upgrade", "0011_identity_and_workspaces"],
+                                env=env, capture_output=True, text=True)
+        assert result.returncode != 0
+        with sqlite3.connect(path) as conn:
+            assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0010_income_profiles"
+            assert not conn.execute(
+                "SELECT name FROM sqlite_master WHERE name='workspaces'"
+            ).fetchall()
+            assert conn.execute("SELECT owner_id FROM accounts").fetchone()[0] == "legacy-user"
+    run_alembic(path, "upgrade", "0011_identity_and_workspaces")
+    with sqlite3.connect(path) as conn:
+        owner = conn.execute("SELECT owner_id FROM accounts").fetchone()[0]
+        assert owner == conn.execute("SELECT id FROM workspaces").fetchone()[0]
+        assert conn.execute("SELECT subject FROM auth_identities").fetchone()[0] == "legacy-user"
+
+
+def test_0011_downgrade_refuses_ambiguous_or_unconfirmed_mapping(tmp_path):
+    path = tmp_path / "downgrade.db"
+    run_alembic(path, "upgrade", "0011_identity_and_workspaces")
+    with sqlite3.connect(path) as conn:
+        conn.execute("INSERT INTO users (id, active, created_at) VALUES ('user-1', 1, CURRENT_TIMESTAMP)")
+        conn.execute("INSERT INTO workspaces (id, owner_user_id, name, created_at) "
+                     "VALUES ('workspace-1', 'user-1', 'Primary', CURRENT_TIMESTAMP)")
+        conn.execute("INSERT INTO auth_identities "
+                     "(user_id, provider, issuer, subject, created_at) "
+                     "VALUES ('user-1', 'clerk', 'https://serenity-test.clerk.example', "
+                     "'subject-1', CURRENT_TIMESTAMP)")
+    env = {
+        **os.environ, "DATABASE_URL": f"sqlite:///{path}",
+        "SERENITY_CONFIRM_WORKSPACE_DOWNGRADE": "",
+    }
+    result = subprocess.run([sys.executable, "-m", "alembic", "downgrade", "0010_income_profiles"],
+                            env=env, capture_output=True, text=True)
+    assert result.returncode != 0
+    with sqlite3.connect(path) as conn:
+        conn.execute("INSERT INTO auth_identities "
+                     "(user_id, provider, issuer, subject, created_at) "
+                     "VALUES ('user-1', 'clerk', 'https://other.example.test', "
+                     "'subject-2', CURRENT_TIMESTAMP)")
+    env["SERENITY_CONFIRM_WORKSPACE_DOWNGRADE"] = "1"
+    result = subprocess.run([sys.executable, "-m", "alembic", "downgrade", "0010_income_profiles"],
+                            env=env, capture_output=True, text=True)
+    assert result.returncode != 0
+    with sqlite3.connect(path) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM auth_identities").fetchone()[0] == 2
 
 
 def test_alembic_head_builds_expected_sqlite_schema(tmp_path):
@@ -310,13 +379,17 @@ def test_0008_backfills_all_existing_records_to_declared_owner(tmp_path):
 
     connection = sqlite3.connect(database_path)
     try:
+        workspace_id = connection.execute(
+            "SELECT id FROM workspaces WHERE owner_user_id IN "
+            "(SELECT user_id FROM auth_identities WHERE subject = 'owner-a')"
+        ).fetchone()[0]
         for table in (
             "accounts", "bills", "debts", "investments", "businesses",
             "dependents", "transactions", "transaction_corrections",
         ):
             assert connection.execute(
                 f"SELECT DISTINCT owner_id FROM {table}"
-            ).fetchall() in ([], [("owner-a",)])
+            ).fetchall() in ([], [(workspace_id,)])
     finally:
         connection.close()
 

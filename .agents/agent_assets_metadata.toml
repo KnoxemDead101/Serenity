@@ -1,0 +1,30 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "LFq0tfzjmdAh8w-YSGrxF"
+uri = "file://docs/CHAT_HANDOFF.md"
+type = "text"
+title = "Serenity — Updated Brainstorming Handoff"
+description = "Current implementation, verification history, and proposed profile settings, private invited users, and secure six-digit PIN access."
+logical_id = "158ebbe8-248f-4dfd-98ab-801c4e7019d8"
+content_hash = "sha256:760111cafe393c15463f5c5fcebfe30c7a93096ad60f75c792631945a5a9dd74"
+size = 11384
+mtime_ms = 1790283138484
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:99fff1e8-2d9f-4724-9404-a291740919d7/158ebbe8-248f-4dfd-98ab-801c4e7019d8/a426c5d8-1f7a-4a5e-9f92-a5db65a69c09"
+storage_version_token = "1790283147097284"
+content_type = "text/markdown"
+
+[[outputs]]
+id = "dD9-KFJyb-NvQM1zez4t-"
+uri = "file://docs/HOSTING.md"
+type = "text"
+title = "Serenity — External Hosting Guide"
+description = "Server requirements, deployment steps, backups, and the authentication migration prerequisite."
+logical_id = "991f54da-8793-4ce7-a56c-e4c20bd27997"
+content_hash = "sha256:ebd509ecaed49152f2d335667280590f76c5aebbbfc09c604e9cea6c65b503bd"
+size = 5446
+mtime_ms = 1790205153362
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:99fff1e8-2d9f-4724-9404-a291740919d7/991f54da-8793-4ce7-a56c-e4c20bd27997/3e7d163a-6b76-4d11-84d4-1256eea0fde3"
+storage_version_token = "1790205468165928"
+content_type = "text/markdown"

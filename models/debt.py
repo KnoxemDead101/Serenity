@@ -10,7 +10,7 @@ live here, never as Accounts, so the same money owed is counted once.
 
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Index, Integer, String, Text, true
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, Index, Integer, String, Text, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from models.account import utc_now
@@ -26,13 +26,13 @@ class Debt(Base):
     owner_id: Mapped[str] = mapped_column(String(OWNER_ID_MAX_LENGTH), nullable=False)
     name: Mapped[str] = mapped_column(String(100))
     debt_type: Mapped[str] = mapped_column(String(50), default="Other")
-    balance_cents: Mapped[int] = mapped_column(Integer, default=0)
+    balance_cents: Mapped[int] = mapped_column(BigInteger, default=0)
     interest_rate_milli: Mapped[int] = mapped_column(Integer, default=0)
-    minimum_payment_cents: Mapped[int] = mapped_column(Integer, default=0)
+    minimum_payment_cents: Mapped[int] = mapped_column(BigInteger, default=0)
     due_date: Mapped[date | None] = mapped_column(Date)
     notes: Mapped[str | None] = mapped_column(Text)
-    # False = deactivated. Keep inactive records for history, but exclude them
-    # from debt totals. Records are never hard-deleted.
+    # False = deactivated via the legacy lifecycle endpoint; excluded from totals.
+    # The Delete action permanently removes either active or inactive records.
     active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(

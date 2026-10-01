@@ -6,6 +6,12 @@
  */
 
 let sessionRecoveryActive = false;
+let sessionRecoveryReason = "ended";
+
+function accountIsInactive(response) {
+  return response.status === 403 &&
+    response.headers.get("X-Serenity-Account-Status") === "inactive";
+}
 
 // This channel carries only a fixed event name, never account data or tokens.
 // Browsers without BroadcastChannel still recheck when the tab is revisited.
@@ -46,6 +52,7 @@ async function recheckSession() {
       signal: controller.signal,
     });
     if (response.status === 401) showSessionRecovery();
+    else if (accountIsInactive(response)) showSessionRecovery("inactive");
   } catch {
     // An outage is not proof of revocation. No redirect or automatic retry;
     // a later tab revisit can check again.
@@ -80,9 +87,10 @@ function safeReturnPath(value) {
   }
 }
 
-function showSessionRecovery() {
+function showSessionRecovery(reason = "ended") {
   if (sessionRecoveryActive) return;
   sessionRecoveryActive = true;
+  sessionRecoveryReason = reason;
   clearTimeout(sessionCheckTimer);
   const main = document.querySelector("main");
   if (!main) return;
@@ -95,14 +103,17 @@ function showSessionRecovery() {
   panel.setAttribute("aria-live", "assertive");
   const heading = document.createElement("h1");
   heading.tabIndex = -1;
-  heading.textContent = "Your session has ended";
+  heading.textContent = reason === "inactive"
+    ? "Your account is inactive" : "Your session has ended";
   const explanation = document.createElement("p");
-  explanation.textContent = "Your financial information has been cleared from this page. Sign in again to continue. If sign-in is temporarily unavailable, try again later.";
+  explanation.textContent = reason === "inactive"
+    ? "Your financial information has been cleared from this page. Contact your administrator to restore access. You can retry after your account is reactivated."
+    : "Your financial information has been cleared from this page. Sign in again to continue. If sign-in is temporarily unavailable, try again later.";
   const actions = document.createElement("div");
   actions.className = "form-buttons";
   const signIn = document.createElement("a");
   signIn.className = "button";
-  signIn.textContent = "Sign in again";
+  signIn.textContent = reason === "inactive" ? "Go to sign-in" : "Sign in again";
   signIn.href = "/sign-in?next=" + encodeURIComponent(
     safeReturnPath(window.location.pathname + window.location.search)
   );
@@ -125,7 +136,9 @@ function showSessionRecovery() {
         ));
         return;
       }
-      message.textContent = "Your session is still unavailable. Sign in again or try later.";
+      message.textContent = accountIsInactive(response)
+        ? "Your account is still inactive. Contact your administrator."
+        : "Your session is still unavailable. Sign in again or try later.";
     } catch {
       message.textContent = "Unable to check your session. Please try again later.";
     } finally {
@@ -139,7 +152,9 @@ function showSessionRecovery() {
 }
 
 function ensureSessionActive() {
-  if (sessionRecoveryActive) throw new Error("Your session has ended.");
+  if (sessionRecoveryActive) throw new Error(
+    sessionRecoveryReason === "inactive" ? "Your account is inactive." : "Your session has ended."
+  );
 }
 
 // Send a GET request and return the parsed JSON.
@@ -181,6 +196,10 @@ async function handleResponse(response) {
   if (response.status === 401) {
     showSessionRecovery();
     throw new Error("Your session has ended.");
+  }
+  if (accountIsInactive(response)) {
+    showSessionRecovery("inactive");
+    throw new Error("Your account is inactive.");
   }
   ensureSessionActive();
   const data = await response.json().catch(() => null);

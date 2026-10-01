@@ -205,3 +205,32 @@ th { color: var(--color-text-muted); }
   .transactions-table th:nth-child(6), .transactions-table td:nth-child(6),
   .transactions-table th:nth-child(7), .transactions-table td:nth-child(7) { display: none; }
 }
+
+/* Reconciliation is a review workspace, not a posting workflow. */
+.reconciliation-group {
+  min-width: 0;
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.reconciliation-group legend { font-weight: 600; padding: 0 5px; }
+.reconciliation-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  align-items: start;
+  gap: 12px;
+}
+.reconciliation-fields input, .reconciliation-fields select { width: 100%; min-width: 0; }
+.reconciliation-fields label:has(input[type="checkbox"]) {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+.reconciliation-fields input[type="checkbox"] { width: auto; min-width: 18px; min-height: 18px; }
+.reconciliation-members { grid-column: 1 / -1; }
+.reconciliation-members p { margin: 0 0 8px; }
+.reconciliation-members label { margin: 6px 0; }
+#reconciliation h3, #reconciliation h4 { margin-bottom: 8px; }

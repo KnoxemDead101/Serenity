@@ -28,7 +28,7 @@ when displaying. `utc_now()` below is the one place "now" comes from.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from services.ownership import OWNER_ID_MAX_LENGTH
@@ -42,7 +42,12 @@ def utc_now() -> datetime:
 
 class Account(Base):
     __tablename__ = "accounts"
-    __table_args__ = (Index("ix_accounts_owner_id", "owner_id"),)
+    __table_args__ = (
+        Index("ix_accounts_owner_id", "owner_id"),
+        # An additive index lets new containers reference an account together
+        # with its owner, without rebuilding the legacy accounts table.
+        Index("ux_accounts_owner_id_id", "owner_id", "id", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     owner_id: Mapped[str] = mapped_column(String(OWNER_ID_MAX_LENGTH), nullable=False)
@@ -51,7 +56,7 @@ class Account(Base):
     classification: Mapped[str] = mapped_column(String(50))
 
     # Stored in cents. See utils/money.py for why.
-    opening_balance_cents: Mapped[int] = mapped_column(Integer, default=0)
+    opening_balance_cents: Mapped[int] = mapped_column(BigInteger, default=0)
 
     # "str | None" means the column may be empty (NULL).
     institution: Mapped[str | None] = mapped_column(String(100))

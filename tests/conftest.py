@@ -11,8 +11,9 @@ That means:
 import os
 from urllib.parse import urlsplit
 
-if os.getenv("DATABASE_URL", "").startswith("postgresql"):
-    os.environ["DATABASE_URL"] = "sqlite://"
+# Never let app imports bind to caller-selected databases, including postgres://
+# aliases or persistent SQLite files. PostgreSQL tests supply a private cluster.
+os.environ["DATABASE_URL"] = "sqlite://"
 os.environ.setdefault("SESSION_SECRET", "test-session-secret")
 
 import pytest
@@ -27,7 +28,10 @@ import models.business  # noqa: F401
 import models.debt  # noqa: F401
 import models.dependent  # noqa: F401
 import models.investment  # noqa: F401
+import models.instrument  # noqa: F401
+import models.portfolio  # noqa: F401
 import models.income_profile  # noqa: F401
+import models.identity  # noqa: F401
 import models.transaction  # noqa: F401
 import models.transaction_correction  # noqa: F401
 import auth
@@ -36,6 +40,15 @@ from main import app
 from storage.database import Base, get_db
 
 TEST_OWNER_ID = "test-owner"
+TEST_CLERK_ISSUER = "https://serenity-test.clerk.example"
+
+
+@pytest.fixture(autouse=True)
+def configured_test_clerk(monkeypatch):
+    import base64
+    host = "serenity-test.clerk.example$"
+    monkeypatch.setenv("CLERK_PUBLISHABLE_KEY", "pk_test_" + base64.b64encode(host.encode()).decode())
+    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test_fake_for_isolated_tests")
 
 
 @pytest.fixture

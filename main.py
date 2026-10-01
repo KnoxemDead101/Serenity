@@ -20,6 +20,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm import Session
 
 from api import (
     accounts,
@@ -29,16 +30,24 @@ from api import (
     export,
     finance,
     income_profiles,
+    instruments,
+    portfolios,
+    reconciliation,
     transactions,
 )
 from auth import (
     AUTH_COOKIE,
     bearer_token,
+    ClerkUnavailableError,
+    configured_clerk_issuer,
+    current_user,
     issue_session,
     require_page_session,
     require_session,
     verify_clerk_token,
 )
+from services import identity_service
+from storage.database import get_db
 
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 
@@ -55,15 +64,35 @@ def auth_config():
 
 
 @auth_router.post("/session")
-def create_session(request: Request):
+def create_session(request: Request, db: Session = Depends(get_db)):
     token = bearer_token(request)
-    identity = verify_clerk_token(token) if token else None
+    try:
+        if token:
+            configured_clerk_issuer()
+        identity = verify_clerk_token(token) if token else None
+    except ClerkUnavailableError:
+        return JSONResponse({"detail": "Sign-in is temporarily unavailable"}, status_code=503)
     if identity is None:
+        return JSONResponse({"detail": "Valid sign-in required"}, status_code=401)
+    clerk_user_id, clerk_session_id = identity
+    try:
+        identity_service.workspace_for_identity(
+            db, provider=identity_service.CLERK_PROVIDER,
+            issuer=configured_clerk_issuer(), subject=clerk_user_id, record_sign_in=True,
+        )
+    except ClerkUnavailableError:
+        return JSONResponse({"detail": "Sign-in is temporarily unavailable"}, status_code=503)
+    except identity_service.InactiveUserError:
+        return JSONResponse(
+            {"detail": "This Serenity account has been deactivated"}, status_code=403,
+            headers={"X-Serenity-Account-Status": "inactive"},
+        )
+    except identity_service.IdentityError:
         return JSONResponse({"detail": "Valid sign-in required"}, status_code=401)
     response = JSONResponse({"authenticated": True})
     response.set_cookie(
         AUTH_COOKIE,
-        issue_session(*identity),
+        issue_session(clerk_user_id, clerk_session_id),
         httponly=True,
         secure=os.getenv("SERENITY_DEV") != "1",
         samesite="lax",
@@ -79,9 +108,9 @@ def delete_session():
     return response
 
 
-@auth_router.get("/me", dependencies=[Depends(require_session)])
-def auth_me(request: Request):
-    return {"user_id": require_session(request)}
+@auth_router.get("/me")
+def auth_me(request: Request, workspace_id: str = Depends(require_session)):
+    return {"user_id": current_user(request), "workspace_id": workspace_id}
 
 
 app.include_router(auth_router)
@@ -96,6 +125,9 @@ for router in (
     businesses.router,
     dependents.router,
     income_profiles.router,
+    instruments.router,
+    portfolios.router,
+    reconciliation.router,
 ):
     app.include_router(router, dependencies=[Depends(require_session)])
 
@@ -121,6 +153,16 @@ def finances_page(_: str = Depends(require_page_session)):
 @app.get("/income", include_in_schema=False)
 def income_page(_: str = Depends(require_page_session)):
     return FileResponse(FRONTEND_DIR / "incomes.html")
+
+
+@app.get("/profit-engine", include_in_schema=False)
+def profit_engine_page(_: str = Depends(require_page_session)):
+    return FileResponse(FRONTEND_DIR / "profit_engine.html")
+
+
+@app.get("/portfolios", include_in_schema=False)
+def portfolios_page(_: str = Depends(require_page_session)):
+    return FileResponse(FRONTEND_DIR / "portfolios.html")
 
 
 @app.get("/setup", include_in_schema=False)

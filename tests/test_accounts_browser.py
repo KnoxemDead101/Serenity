@@ -346,6 +346,60 @@ def test_revocation_clears_open_financial_page_and_outage_does_not_loop(page, cl
     assert "Private emergency fund" not in page.locator("main").inner_text()
 
 
+def test_inactive_account_clears_open_page_only_with_explicit_status(page, client):
+    add_account(client, "Private savings", "4321.00")
+    page.goto("http://serenity.test/accounts")
+    expect(page.locator("#accounts-body")).to_contain_text("Private savings")
+    page.locator("#account-form [name=notes]").fill("Unsaved draft")
+    page.route("**/serenity-api/accounts", lambda route: route.fulfill(
+        status=403, content_type="application/json",
+        headers={"X-Serenity-Account-Status": "inactive"},
+        body='{"detail":"Account inactive"}'
+    ))
+    page.evaluate("apiGet('/serenity-api/accounts').catch(() => {})")
+    recovery = page.get_by_role("alert")
+    expect(recovery).to_contain_text("Your account is inactive")
+    expect(recovery).to_contain_text("Contact your administrator")
+    expect(page.locator("#account-form")).to_have_count(0)
+    assert "Private savings" not in page.locator("main").inner_text()
+    assert "Unsaved draft" not in page.locator("main").inner_text()
+    assert recovery.get_by_role("link", name="Go to sign-in").get_attribute("href") == (
+        "/sign-in?next=%2Faccounts"
+    )
+    checks = []
+
+    def still_inactive(route):
+        checks.append(route.request.url)
+        route.fulfill(
+            status=403, content_type="application/json",
+            headers={"X-Serenity-Account-Status": "inactive"},
+            body='{"detail":"Account inactive"}',
+        )
+
+    page.route("**/serenity-api/auth/me", still_inactive)
+    recovery.get_by_role("button", name="Retry session").click()
+    expect(recovery.get_by_role("status")).to_contain_text("still inactive")
+    page.wait_for_timeout(300)
+    assert len(checks) == 1
+    assert page.url == "http://serenity.test/accounts"
+
+
+def test_other_forbidden_response_keeps_financial_page(page, client):
+    add_account(client, "My savings")
+    page.goto("http://serenity.test/accounts")
+    expect(page.locator("#accounts-body")).to_contain_text("My savings")
+    page.route("**/serenity-api/accounts", lambda route: route.fulfill(
+        status=403, content_type="application/json",
+        body='{"detail":"This action is forbidden"}'
+    ))
+    assert page.evaluate("""async () => {
+        try { await apiGet('/serenity-api/accounts'); return ''; }
+        catch (error) { return error.message; }
+    }""") == "This action is forbidden"
+    expect(page.get_by_role("alert")).to_have_count(0)
+    expect(page.locator("#accounts-body")).to_contain_text("My savings")
+
+
 def test_safe_return_path_rejects_external_destinations(page, client):
     page.goto("http://serenity.test/accounts")
     assert page.evaluate("safeReturnPath('//attacker.test/steal')") == "/"
@@ -439,6 +493,44 @@ def test_tab_revisit_detects_revocation_without_broadcast_channel(page, client):
     assert len(checks) == 1
     assert other.url == "http://serenity.test/accounts"
     other.close()
+
+
+def test_tab_revisit_detects_inactive_account(page, client):
+    add_account(client, "Private investment account", "123.00")
+    page.goto("http://serenity.test/accounts")
+    expect(page.locator("#accounts-body")).to_contain_text("Private investment account")
+    page.locator("#account-form [name=notes]").fill("Draft to discard")
+    checks = []
+
+    def inactive(route):
+        checks.append(route.request.url)
+        route.fulfill(
+            status=403, content_type="application/json",
+            headers={"X-Serenity-Account-Status": "inactive"},
+            body='{"detail":"Account inactive"}',
+        )
+
+    page.route("**/serenity-api/auth/me", inactive)
+    page.evaluate("""() => {
+        Object.defineProperty(document, "visibilityState", {
+            configurable: true, value: "hidden"
+        });
+        document.dispatchEvent(new Event("visibilitychange"));
+        Object.defineProperty(document, "visibilityState", {
+            configurable: true, value: "visible"
+        });
+        document.dispatchEvent(new Event("visibilitychange"));
+        window.dispatchEvent(new Event("focus"));
+    }""")
+    expect(page.get_by_role("alert")).to_contain_text("Your account is inactive")
+    expect(page.locator("#account-form")).to_have_count(0)
+    assert "Private investment account" not in page.locator("main").inner_text()
+    assert "Draft to discard" not in page.locator("main").inner_text()
+    assert checks == ["http://serenity.test/serenity-api/auth/me"]
+    page.evaluate("window.dispatchEvent(new Event('focus'))")
+    page.wait_for_timeout(400)
+    assert len(checks) == 1
+    assert page.url == "http://serenity.test/accounts"
 
 
 def test_focus_session_checks_are_bounded_and_outage_never_redirects(page, client):

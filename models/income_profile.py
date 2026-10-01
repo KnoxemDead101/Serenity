@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text, true
+from sqlalchemy import BigInteger, Boolean, DateTime, Index, Integer, String, Text, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from models.account import utc_now
@@ -23,12 +23,12 @@ class IncomeProfile(Base):
     )
     pay_frequency: Mapped[str | None] = mapped_column(String(20))
 
-    hourly_rate_cents: Mapped[int | None] = mapped_column(Integer)
+    hourly_rate_cents: Mapped[int | None] = mapped_column(BigInteger)
     standard_hours_hundredths: Mapped[int | None] = mapped_column(Integer)
     expected_hours_hundredths: Mapped[int | None] = mapped_column(Integer)
-    annual_salary_cents: Mapped[int | None] = mapped_column(Integer)
-    amount_per_period_cents: Mapped[int | None] = mapped_column(Integer)
-    expected_net_per_period_cents: Mapped[int | None] = mapped_column(Integer)
+    annual_salary_cents: Mapped[int | None] = mapped_column(BigInteger)
+    amount_per_period_cents: Mapped[int | None] = mapped_column(BigInteger)
+    expected_net_per_period_cents: Mapped[int | None] = mapped_column(BigInteger)
 
     notes: Mapped[str | None] = mapped_column(Text)
     active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())

@@ -66,7 +66,7 @@ def test_page_redirect_preserves_requested_query(real_auth_client):
     )
     assert response.status_code == 307
     assert response.headers["location"].endswith(
-        "/sign-in?next=/accounts?filter=checking"
+        "/sign-in?next=/accounts%3Ffilter%3Dchecking"
     )
 
 

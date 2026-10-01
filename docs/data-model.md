@@ -3,11 +3,19 @@
 All tables have integer primary keys and UTC `created_at`/`updated_at`
 timestamps. Alembic migrations are the executable schema source of truth.
 
-## Nothing is hard-deleted
+## Record removal and history
 
-Financial history is retained. Accounts, bills, debts, investments,
-businesses and dependents are deactivated with `active = false`; transactions
-are soft-deleted with `deleted_at` and a correction-history snapshot.
+Bills, debts, and investments can be permanently deleted through owner-scoped
+DELETE endpoints after browser confirmation. Deletion removes the stored row,
+its contribution to totals, and its presence in future exports. Re-adding an
+item creates a new record; there is no undo. Prior backups can retain copies.
+Existing inactive records are not automatically purged: the UI lets their
+owner explicitly delete them too. Legacy deactivation/reactivation endpoints
+remain for compatibility, but the finance UI uses Delete.
+
+Accounts, businesses and dependents retain deactivation with `active = false`;
+transactions remain soft-deleted with `deleted_at` and a correction-history
+snapshot. Permanent finance deletion does not change account or transaction history.
 
 - Inactive accounts are omitted from new-transaction choices and cannot receive
   new transactions, but still count toward balances and net worth.
@@ -16,11 +24,16 @@ are soft-deleted with `deleted_at` and a correction-history snapshot.
 - Inactive businesses and dependents cannot be newly linked; existing links
   remain valid for historical transactions.
 
-Every record type can be edited and reactivated.
+Instrument references follow their own archive/reactivate policy below;
+finance deletion follows the policy above. Portfolios and investment-account
+containers are archived, not deleted; archival does not move or devalue assets.
 
 ## accounts
 
-An Account is an owned financial container. Credit cards are Debts.
+An Account is an owned financial container. Credit cards are Debts. A
+Phase 2a InvestmentAccount may link to one existing Account; this link is
+organizational metadata, not a second balance or proof that its current
+opening balance represents cash only.
 
 | Column | Storage |
 |---|---|
@@ -152,9 +165,59 @@ entry with Holdings and Investment Transactions.
 
 For example, `0.12345678` units is stored as `12,345,678`.
 
-**Until the Portfolio milestone:** Brokerage or Retirement opening balances
-should be cash only; holdings are entered as Investments to avoid counting
-the same money twice.
+Existing Brokerage, Retirement or Trading balances may already include
+securities. Never silently interpret them as cash-only or automatically add
+holdings to net worth. Continue the current dashboard treatment until
+per-record reconciliation and an approved valuation switch; do not fabricate
+historical purchases from existing Investment entries.
+
+## portfolios and investment_accounts (Phase 2a organization)
+
+`portfolios` are workspace-private, named organizational groups, including
+empty groups. `investment_accounts` are named metadata containers with exactly
+one portfolio membership and one owner-checked link to an existing Account.
+They do not store a second cash balance, quantity, valuation, or activity.
+
+| Table | Fields and constraints |
+|---|---|
+| `portfolios` | ID, `owner_id`, name, optional notes, active, UTC timestamps; unique `(owner_id, id)` parent key |
+| `investment_accounts` | ID, `owner_id`, name, optional notes, `portfolio_id`, `account_id`, active, UTC timestamps; one link per Account including archived containers |
+
+New relationships match owner and ID at both the service and foreign-key
+levels. Migration `0015_portfolio_containers` adds an Account unique
+`(owner_id, id)` index (without rebuilding Accounts) for the composite
+owner/Account reference; it adds no legacy Investment associations or data
+backfill. The cash-account link cannot be replaced after creation. Portfolio
+membership can be changed without a transfer or balance change. Portfolios
+cannot be archived while they contain active containers; archived containers
+retain their Account link, preventing reuse. Archived records remain exportable.
+These tables do not participate in the current net-worth formula.
+
+## instruments and instrument_specifications (Phase 1)
+
+Migration `0014_instrument_registry` additively creates two workspace-private
+tables; it does not change existing `investments` or net worth.
+`instruments` stores owner ID, immutable uppercase symbol and active flag;
+the owner/symbol pair is unique. Owners can archive/reactivate references but
+cannot delete their version history through the API. Immutable, sequential
+`instrument_specifications` store the instrument ID, matching owner ID, version,
+symbol, name, service-validated unchangeable asset type (`STOCK`, `ETF` or
+`FUTURE`), optional exchange,
+USD currency, tick size and point value as positive BIGINT units of 1e-8, and
+creation time. Metadata edits append a new version, leaving older versions
+intact. Asset type remains fixed via service validation; it is not duplicated
+on the parent row. Archived specifications remain usable by ID for hypothetical
+historical calculations. USD is the only supported currency; no prices are
+fetched automatically, no executed trades or account movements are stored.
+The protected `/profit-engine` page displays a hypothetical calculator, not
+positions or financial holdings.
+
+Owner-scoped JSON export format 3 includes both reference tables and all spec
+versions plus portfolios and investment-account links; this is not a tested
+import/restore format. A nonempty instrument table prevents destructive
+downgrade of migration 0014, and nonempty portfolio/container tables prevent
+destructive downgrade of 0015. For future holdings and trade history, see
+[PROFIT_ENGINE_REVIEW.md](PROFIT_ENGINE_REVIEW.md).
 
 ## businesses
 

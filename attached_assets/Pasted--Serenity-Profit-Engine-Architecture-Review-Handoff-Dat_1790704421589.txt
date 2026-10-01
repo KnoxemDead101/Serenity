@@ -1,0 +1,1734 @@
+# Serenity — Profit Engine Architecture Review Handoff
+
+**Date:** September 29, 2026  
+**Purpose:** Repository review, architecture validation, technical design, and implementation planning for Serenity's next major phase.
+
+---
+
+# 1. IMPORTANT: THIS IS AN ARCHITECTURE REVIEW, NOT AN IMPLEMENTATION REQUEST
+
+Do **not** begin implementing the Profit Engine from this handoff.
+
+First inspect the current Serenity repository, current models, migrations, services, routes, schemas, tests, frontend behavior, authentication/workspace ownership implementation, exports, backup documentation, and dashboard architecture.
+
+The existing application must be treated as the source of truth.
+
+This document defines what Serenity is intended to become and records product decisions that have already been made. Your job in this phase is to determine how the existing application can safely evolve toward that design.
+
+Return an architecture review and recommended implementation sequence before writing production migrations or implementing the Profit Engine.
+
+Do not silently make unresolved product decisions.
+
+Where the desired design conflicts with or duplicates something already implemented, identify the conflict and recommend the safest approach.
+
+---
+
+# 2. Current Product Direction
+
+Serenity began as a personal-finance application but is evolving into a broader personal financial operating system.
+
+Its purpose is becoming:
+
+> Bring the user's finances, financial planning, investments, portfolio management, trading preparation, trade execution records, journaling, and financial decision-making into one structured workspace.
+
+Serenity should eventually help answer:
+
+1. Where do my finances stand?
+2. What requires my attention today?
+3. What bills or financial obligations are approaching?
+4. What goals and planned contributions are approaching?
+5. What assets and investments do I own?
+6. How is my long-term capital growing?
+7. What markets am I currently watching?
+8. What market levels or zones remain relevant?
+9. What is my trading plan?
+10. What trades did I actually execute?
+11. Did I follow my plan?
+12. What was my actual risk and reward?
+13. Is my trading strategy working over time?
+14. Where is my financial plan currently heading?
+15. How would changes to my financial assumptions affect that future?
+
+Serenity should organize these systems without incorrectly treating all financial activity as the same thing.
+
+---
+
+# 3. Current Verified Baseline
+
+The September 24 project handoff records the following existing functionality:
+
+- Accounts.
+- Income and expense transactions.
+- Transaction correction history.
+- Calculated account balances.
+- Bills.
+- Debts.
+- Existing Investments implementation.
+- Dashboard totals and net worth.
+- Business and dependent context.
+- Record edit/deactivate controls.
+- Income Profiles for planned income.
+- JSON backup export.
+- Transaction CSV export.
+- Responsive dark interface.
+- Python-owned financial calculations.
+- Internal Serenity users and primary workspaces.
+- Financial records isolated by workspace.
+- Clerk authentication mapped to Serenity internal ownership.
+
+Current technical stack:
+
+- Python 3.11
+- FastAPI
+- SQLAlchemy 2
+- Pydantic
+- Alembic
+- SQLite
+- PostgreSQL through `DATABASE_URL`
+- Plain HTML/CSS/JavaScript
+- pytest
+- Playwright/Chromium tests
+
+Existing architectural rules include:
+
+- Money stored using integer representations, not floating-point financial storage.
+- Existing investment quantities use fixed/scaled integer storage.
+- UTC timestamps.
+- Explicit migrations before deployment.
+- Financial calculations belong in Python rather than JavaScript.
+- Workspace isolation is a backend authorization requirement.
+- Existing records must be preserved.
+- Store facts and calculate results.
+
+Do not assume this summary replaces current code. Inspect the repository.
+
+---
+
+# 4. Existing Loose Ends That Must Remain Visible
+
+Profit Engine development must not cause existing unresolved work to disappear from the roadmap.
+
+## Production authentication verification
+
+Before relying on Serenity for real financial records, the published application still needs verified:
+
+- production login;
+- authenticated disposable read/write;
+- refresh;
+- sign-out;
+- denied protected access after sign-out;
+- confirmation of the appropriate production database;
+- confirmation of backup expectations.
+
+Preview authentication does not establish production authentication.
+
+This does not prevent Profit Engine architecture work, but it remains a real-data readiness requirement.
+
+## Multi-user isolation
+
+Workspace ownership exists, but every new Profit Engine endpoint and entity must preserve it.
+
+Future testing must prove that User A cannot read, modify, export, reference, or otherwise access User B's:
+
+- portfolios;
+- investment accounts;
+- holdings;
+- investment activity;
+- trading accounts;
+- market analyses;
+- market levels;
+- zones;
+- trading plans;
+- trading days;
+- trades;
+- fills;
+- journals;
+- reviews;
+- future attachments;
+- dashboard/attention information.
+
+Invitation to Serenity means application access, not access to another user's financial workspace.
+
+## Backup and portability
+
+Database-native SQLite/PostgreSQL backup and restore rehearsals exist with synthetic data.
+
+However, continue distinguishing:
+
+### Operational database backup
+Disaster recovery.
+
+### Serenity Workspace Backup
+Portable machine-readable Serenity workspace capable of reconstruction.
+
+### Human-readable export
+CSV/PDF/reports usable outside Serenity.
+
+The current exports must not be mistaken for a complete workspace restore format.
+
+Future Profit Engine entities must eventually participate in portability and export.
+
+## Profile/settings
+
+Profile and authentication settings remain planned.
+
+Authentication-provider responsibilities must not be duplicated inside Serenity unnecessarily.
+
+Passwords must not be stored in Serenity's financial database.
+
+## PIN / quick unlock
+
+Six-digit quick access remains a desired future feature but is not approved for implementation yet.
+
+Do not weaken Clerk authentication or workspace authorization.
+
+## Self-hosting
+
+Serenity is intended to eventually run on infrastructure controlled by the owner.
+
+Do not introduce unnecessary Replit-specific domain architecture.
+
+Authentication migration and provider ownership remain separate future concerns.
+
+---
+
+# 5. Core Architecture Rules — Preserve These
+
+The following are non-negotiable unless a concrete technical defect is identified and reviewed first.
+
+## Financial arithmetic
+
+Never use ordinary floating-point storage for financial values.
+
+Preserve accurate integer/fixed-precision representations.
+
+## Store facts, calculate results
+
+Do not store derived values merely because they are convenient to display.
+
+Examples:
+
+Account balance should continue to be calculated from its underlying facts.
+
+Future open trading quantity should be derived from fills.
+
+Portfolio cost basis should be derived from investment activity where practical.
+
+## Actual ≠ Projected ≠ Scenario
+
+Actual financial records must remain separate from projections and hypothetical scenarios.
+
+Scenarios must never overwrite actual records.
+
+## Investing ≠ Trading
+
+Long-term investing and active trading are different financial domains.
+
+They may share instruments and interact through real capital movement, but they should not be modeled as identical activities.
+
+## Trading profit remains in trading capital
+
+Trading P&L does not automatically become checking-account income.
+
+Money changes financial location only when an actual withdrawal/transfer occurs.
+
+## Prop-firm buying power is not net worth
+
+Prop account buying power is not a personal financial asset.
+
+Fees paid and payouts actually received can affect real finances.
+
+## Workspace ownership
+
+Every new financial entity must belong to the appropriate Serenity workspace either directly or through a relationship whose authorization cannot be bypassed.
+
+## Thin routes
+
+Keep financial/business logic in services.
+
+Do not turn API routes into large business-logic modules.
+
+## No financial calculations in JavaScript
+
+Frontend code should collect/display information, not become the authoritative financial calculation engine.
+
+---
+
+# 6. Profit Engine Definition
+
+The Profit Engine is:
+
+> Serenity's system for organizing, planning, measuring, and reviewing capital intended to create future financial growth.
+
+Conceptually:
+
+```text
+PROFIT ENGINE
+│
+├── CAPITAL ENGINE
+│   ├── Savings
+│   ├── Reserves
+│   ├── Contributions
+│   └── Capital allocation
+│
+├── PORTFOLIO ENGINE
+│   ├── Portfolios
+│   ├── Investment Accounts
+│   ├── Holdings
+│   ├── Investment Activity
+│   ├── Cost Basis
+│   ├── Dividends
+│   └── Performance
+│
+└── TRADING ENGINE
+    ├── Trading Accounts
+    ├── Instruments
+    ├── Market Analysis
+    ├── Significant Levels
+    ├── Supply/Demand Zones
+    ├── Trading Plans
+    ├── Trading Days
+    ├── Trades
+    ├── Fills
+    ├── Reviews
+    ├── Journals
+    └── Analytics
+```
+
+---
+
+# 7. Portfolio Decision — Multiple Portfolios
+
+Serenity must support multiple portfolios.
+
+Do not assume one permanent global portfolio.
+
+Example:
+
+```text
+Profit Engine
+│
+├── Long-Term Wealth
+│   ├── Robinhood
+│   └── Merrill Roth IRA
+│
+├── Children's Investments
+│   ├── Child 1 Portfolio
+│   └── Child 2 Portfolio
+│
+└── Other Portfolio
+```
+
+However, the UX should remain simple.
+
+A user who only needs one portfolio should not be forced into unnecessary portfolio-management complexity.
+
+Conceptual hierarchy to evaluate:
+
+```text
+Workspace
+└── Portfolio
+    └── Investment Account
+        ├── Holding
+        └── Investment Activity
+```
+
+Determine whether `Portfolio` needs to be a persisted entity or whether some portion can remain organizational/calculated.
+
+---
+
+# 8. Existing Investment Feature
+
+The existing Investment feature was intentionally treated as a placeholder for the eventual Portfolio/Profit Engine.
+
+Do not blindly delete or replace it.
+
+Inspect:
+
+- current Investment model;
+- schemas;
+- services;
+- routes;
+- UI;
+- calculations;
+- quantity storage;
+- tests;
+- exports;
+- dashboard dependencies;
+- migrations;
+- existing data assumptions.
+
+Return a recommendation for whether current Investment records should:
+
+- migrate into Holdings;
+- migrate into Investment Activity;
+- remain temporarily;
+- be transformed another way.
+
+Existing records must not silently disappear.
+
+---
+
+# 9. Investment Accounts vs Existing Accounts
+
+Do not assume a new `InvestmentAccount` model is automatically necessary.
+
+Inspect the existing `Account` architecture.
+
+Determine whether:
+
+- existing Accounts can safely represent brokerage/retirement containers;
+- Account should be extended;
+- InvestmentAccount should be separate;
+- or a relationship/subtype approach is safer.
+
+Consider effects on:
+
+- net worth;
+- transfers;
+- balances;
+- transaction history;
+- portfolio valuation;
+- exports;
+- dashboard totals.
+
+Return a recommendation before implementation.
+
+---
+
+# 10. Instrument Registry
+
+Serenity needs a centralized instrument concept.
+
+Do not create separate duplicated instrument definitions for Portfolio and Trading.
+
+Conceptually:
+
+```text
+Instrument
+│
+├── Portfolio usage
+└── Trading usage
+```
+
+Initial supported instrument scope:
+
+- Stocks
+- ETFs
+- Fractional stock/ETF shares
+- Futures
+  - mini contracts
+  - micro contracts
+
+Options are explicitly deferred.
+
+Do not build an options engine in this phase.
+
+---
+
+# 11. Fractional Shares
+
+The user regularly purchases fractional shares.
+
+Serenity must accurately support quantities such as:
+
+```text
+0.147392 shares
+```
+
+without floating-point financial errors.
+
+Inspect the existing scaled investment-quantity implementation and determine whether it provides appropriate precision and range.
+
+Portfolio calculations should eventually derive:
+
+- total quantity;
+- acquisition history;
+- weighted average cost;
+- cost basis;
+- current value;
+- unrealized gain/loss;
+- realized gain/loss where applicable.
+
+Do not reduce fractional holdings to rounded whole-share representations.
+
+---
+
+# 12. Investment Activity
+
+Holdings should be supported by activity/history rather than simply overwriting current averages.
+
+Conceptually:
+
+```text
+Investment Activity
+
+BUY
+SELL
+DIVIDEND
+CONTRIBUTION
+WITHDRAWAL
+```
+
+Review whether transfers/contributions should reuse existing Serenity transaction infrastructure rather than duplicating financial movements.
+
+Avoid counting the same movement twice.
+
+Example:
+
+```text
+Checking → Brokerage
+```
+
+should not accidentally become both an expense and investment income.
+
+Transfers remain a domain requiring careful modeling.
+
+---
+
+# 13. Trading Account Types
+
+Support these conceptual trading-account types from the beginning:
+
+```text
+PERSONAL_FUNDED
+PROP_FIRM
+SIMULATION
+```
+
+Their financial meaning differs.
+
+## Personal Funded
+
+Real user capital.
+
+Can contribute to personal net worth where appropriate.
+
+## Prop Firm
+
+Buying power is not personal net worth.
+
+Track relevant facts such as:
+
+- firm;
+- account label;
+- account status;
+- fees;
+- trades;
+- payouts.
+
+Only real payouts entering the user's finances should affect personal financial assets/income.
+
+## Simulation
+
+Analytical/training environment only.
+
+Simulation balances and simulated P&L must not affect personal net worth.
+
+---
+
+# 14. External Trading Platform Boundary
+
+The user performs market charting and execution primarily through thinkorswim.
+
+Do not rebuild thinkorswim inside Serenity.
+
+Thinkorswim remains responsible for:
+
+- charting;
+- market visualization;
+- candles;
+- indicators;
+- VWAP visualization;
+- volume;
+- execution;
+- external market research.
+
+Serenity becomes responsible for:
+
+- recording analysis;
+- structuring significant levels;
+- supply/demand zones;
+- areas of interest;
+- strategy planning;
+- trading-day preparation;
+- trade records;
+- journaling;
+- analytics;
+- financial integration.
+
+Do not introduce thinkorswim integration in the initial architecture unless needed only as a future extension point.
+
+---
+
+# 15. Market Analysis
+
+Market analysis must exist independently of individual trades.
+
+Conceptually:
+
+```text
+Instrument
+├── Market Analysis
+├── Active Levels
+├── Active Zones
+└── Trading Days
+```
+
+A user may analyze a market and never trade.
+
+That is valid data.
+
+Analysis may include:
+
+- instrument;
+- created timestamp;
+- intended trading date where applicable;
+- market bias;
+- trend;
+- significant observations;
+- notes;
+- associated levels;
+- associated zones.
+
+---
+
+# 16. Market Levels and Zones Persist Across Trading Days
+
+This requirement is important.
+
+Markets are continuous.
+
+A supply zone, demand zone, support/resistance level, or area of interest may remain relevant across several trading sessions.
+
+Do not make levels children that cease to exist when a Trading Day ends.
+
+Example:
+
+```text
+NQ Demand Zone
+
+Created: Monday
+Reviewed: Tuesday
+Active: Wednesday
+Tested: Thursday
+Invalidated: Friday
+```
+
+Initial lifecycle should remain intentionally simple:
+
+```text
+ACTIVE
+TESTED
+INVALIDATED
+ARCHIVED
+```
+
+Evaluate whether Level and Zone should be separate models or one generalized market-area representation.
+
+Do not over-engineer classification in v1.
+
+---
+
+# 17. Analysis Revision History
+
+Do not overwrite previous reasoning.
+
+Serenity should preserve how analysis changes over time.
+
+Example:
+
+```text
+Initial Analysis
+    ↓
+Evening Update
+    ↓
+Pre-Market Update
+    ↓
+Intraday Update
+```
+
+The user should later be able to determine:
+
+- what they believed originally;
+- what changed;
+- when it changed;
+- what information existed before the trade.
+
+Recommend a clean revision-history approach.
+
+---
+
+# 18. Trading Day
+
+Serenity should represent a Trading Day/Session.
+
+Conceptually:
+
+```text
+Trading Day
+│
+├── Referenced Market Analysis
+├── Trading Plan
+├── Trades
+└── Daily Review / Journal
+```
+
+A Trading Day with zero trades is valid.
+
+Example:
+
+```text
+Analysis completed
+Plan completed
+Setup never appeared
+Trades = 0
+```
+
+A correct decision not to trade should remain part of the user's trading history.
+
+---
+
+# 19. Trading Plan
+
+Trading plans should preserve intended decisions before execution.
+
+Potential information:
+
+- instrument;
+- intended trading date;
+- directional idea/bias;
+- setup;
+- referenced levels/zones;
+- planned entry;
+- planned stop;
+- planned target;
+- planned quantity;
+- maximum risk;
+- minimum risk/reward;
+- maximum trades;
+- entry requirements;
+- invalidation conditions;
+- conditions where trading should be avoided;
+- notes.
+
+Do not assume every plan produces a trade.
+
+---
+
+# 20. Trade Execution Must Support Real Scaling
+
+Do not design the Trade model around only:
+
+```text
+entry_price
+exit_price
+quantity
+```
+
+The user regularly needs realistic trading behavior represented.
+
+Design for:
+
+```text
+Single Entry → Single Exit
+
+Single Entry → Multiple Exits
+
+Multiple Entries → Single Exit
+
+Multiple Entries → Multiple Exits
+```
+
+Scaling in and scaling out must be supported.
+
+Conceptually:
+
+```text
+Trade
+├── Instrument
+├── Direction
+├── Plan relationship
+├── Risk context
+├── Status
+└── Trade Fills
+    ├── Entry Fill
+    ├── Entry Fill
+    ├── Exit Fill
+    └── Exit Fill
+```
+
+Serenity should derive weighted-average entry and exit prices.
+
+Do not require the user to calculate them manually.
+
+---
+
+# 21. Trade Fill
+
+Evaluate a `TradeFill` model supporting facts such as:
+
+- side/type;
+- timestamp;
+- execution price;
+- quantity/contracts;
+- fees where appropriate;
+- notes where useful.
+
+Do not build a full brokerage order-management system unless the existing architecture demonstrates a need.
+
+Planned orders belong in the plan.
+
+Actual executions belong in fills.
+
+Pending/cancelled broker-order routing is deferred.
+
+---
+
+# 22. Position State Must Be Derived
+
+Potential trade states:
+
+```text
+PLANNED
+OPEN
+PARTIALLY_CLOSED
+CLOSED
+```
+
+If:
+
+```text
+Entered = 3 contracts
+Exited = 1 contract
+```
+
+Serenity should derive:
+
+```text
+Open Quantity = 2
+```
+
+Do not create independently editable derived quantities that can disagree with execution history.
+
+---
+
+# 23. Trading Math Service
+
+This is one of the most important components of the proposed architecture.
+
+Trading calculations must not assume:
+
+```text
+1 point = $1
+```
+
+That is false for many futures instruments.
+
+Instrument specifications must drive conversion.
+
+For futures, the system needs concepts such as:
+
+- tick size;
+- tick value;
+- point value;
+- contract quantity;
+- instrument specification/version.
+
+The authoritative Trading Math Service should derive appropriate values from underlying facts.
+
+Potential derived calculations include:
+
+- price difference;
+- points;
+- ticks;
+- dollar value per contract;
+- gross P&L;
+- fees;
+- net P&L;
+- point risk;
+- tick risk;
+- dollar risk;
+- point reward;
+- dollar reward;
+- planned risk/reward;
+- realized R.
+
+Support both LONG and SHORT calculations.
+
+Do not perform authoritative trading math in JavaScript.
+
+---
+
+# 24. Mini vs Micro Futures
+
+Mini and micro contracts cannot share hardcoded point-dollar assumptions.
+
+The instrument specification must determine conversion.
+
+The same number of market points can represent very different dollar risk depending on instrument and contract quantity.
+
+Tests must explicitly prove this.
+
+---
+
+# 25. Planned vs Actual Risk
+
+Preserve planned information separately from actual execution.
+
+Conceptually:
+
+```text
+PLANNED
+
+planned entry
+planned stop
+planned target
+planned quantity
+planned point risk
+planned dollar risk
+planned R:R
+```
+
+versus:
+
+```text
+ACTUAL
+
+fills
+actual average entry
+actual average exit
+actual quantity
+gross P&L
+fees
+net P&L
+realized R
+```
+
+This allows Serenity to evaluate execution quality rather than only profit/loss.
+
+---
+
+# 26. Historical Instrument Specifications
+
+Historical trade calculations must remain reproducible.
+
+If an instrument specification changes later, an old trade must not silently recalculate using new metadata.
+
+Review approaches such as:
+
+- versioned instrument specifications;
+- immutable execution-specification snapshots;
+- another auditable approach.
+
+Recommend the safest design.
+
+Do not silently make this decision during implementation.
+
+---
+
+# 27. Journaling
+
+Journaling is a core feature, not an afterthought.
+
+The user currently wants to eliminate scattered trading notes across notebooks, documents, and unrelated files.
+
+Serenity should eventually support contextual journaling such as:
+
+```text
+General Financial Journal
+
+Investment Notes
+
+Market Analysis Notes
+
+Trading Day Review
+
+Individual Trade Review
+```
+
+Trade review may eventually include structured fields such as:
+
+- followed setup?
+- followed risk?
+- valid entry?
+- moved stop?
+- what went well?
+- what went wrong?
+- what should change?
+- lessons learned?
+
+Avoid building one giant unstructured notes field as the entire journaling system.
+
+---
+
+# 28. Future Attachments
+
+Chart screenshots will eventually be valuable.
+
+Possible future relationships:
+
+```text
+Market Analysis
+└── Attachments
+
+Trade
+└── Attachments
+
+Journal
+└── Attachments
+```
+
+Do not build sophisticated attachment infrastructure in the first Profit Engine slice.
+
+However, avoid architecture that makes attachments unnecessarily difficult later.
+
+---
+
+# 29. Attention Engine
+
+Serenity's dashboard is evolving from a passive summary into an attention-oriented workspace.
+
+The primary dashboard question should become:
+
+> What requires my attention today?
+
+Conceptually:
+
+```text
+Bills ───────────────┐
+Goals ───────────────┤
+Income ──────────────┤
+Portfolio Plans ─────┤
+Trading Plans ───────┼──► ATTENTION ENGINE
+Market Levels ───────┤
+Manual Reminders ────┘
+                          │
+                          ▼
+                     TODAY'S FOCUS
+```
+
+Possible dashboard items:
+
+```text
+Insurance due tomorrow
+
+Emergency-fund checkpoint approaching
+
+Portfolio contribution planned
+
+NQ trading session today
+
+Pre-market review incomplete
+
+NQ demand zone still active
+
+Market level has not been reviewed recently
+```
+
+The Attention Engine should consume facts from domain records rather than requiring every subsystem to create duplicate alert records.
+
+---
+
+# 30. Unified Financial Timeline / Calendar
+
+Do not create completely separate Finance and Trading calendars.
+
+Serenity should eventually have one unified Timeline/Calendar view.
+
+Possible contributors:
+
+- Bills
+- Goals
+- Expected income
+- Portfolio contributions
+- Trading plans
+- Market review dates
+- Manual reminders
+- Future planning events
+
+Important architecture rule:
+
+Do not duplicate known facts simply to place them on the calendar.
+
+Example:
+
+If a Bill already has:
+
+```text
+due_date
+```
+
+avoid creating a second unrelated CalendarEvent saying:
+
+```text
+Bill due
+```
+
+Prefer:
+
+```text
+Source Records
+      ↓
+Timeline Service
+      ↓
+Calendar View
+      ↓
+Attention Service
+```
+
+Manual reminders may be stored independently where appropriate.
+
+---
+
+# 31. Initial Notification Scope
+
+For the first version, focus on:
+
+- Dashboard attention;
+- Today's Focus;
+- Upcoming items;
+- Calendar/timeline presentation.
+
+Defer:
+
+- SMS;
+- push notifications;
+- email notification infrastructure;
+- mobile background notifications.
+
+First prove Serenity can correctly determine what requires attention.
+
+Notification delivery mechanisms can come later.
+
+---
+
+# 32. Dashboard Performance
+
+Do not load the user's entire financial and trading history when opening the dashboard.
+
+Dashboard queries should focus on information such as:
+
+- current summary totals;
+- today's focus;
+- upcoming events;
+- active market levels requiring attention;
+- today's trading plans;
+- relevant portfolio summaries.
+
+Historical systems should support appropriate:
+
+- pagination;
+- date filtering;
+- instrument filtering;
+- account filtering;
+- portfolio filtering.
+
+Do not introduce Redis, Kafka, microservices, distributed queues, or other infrastructure merely because the application is growing.
+
+Use the simplest architecture that correctly solves Serenity's demonstrated requirements.
+
+---
+
+# 33. Data Export and Ownership
+
+The user must continue to own and retrieve their information.
+
+Future export categories should conceptually support:
+
+```text
+Financial
+├── Transactions
+├── Accounts
+├── Bills
+└── Reports
+
+Portfolio
+├── Holdings
+├── Investment Activity
+└── Portfolio Reports
+
+Trading
+├── Trades
+├── Fills
+├── Trading Journal
+├── Market Analysis
+└── Performance Reports
+
+Everything
+└── Serenity Workspace Backup
+```
+
+CSV/PDF/human reports and workspace restore backups are different products.
+
+Do not conflate them.
+
+---
+
+# 34. Systems Explicitly Deferred
+
+Do NOT implement these as part of the initial Profit Engine architecture unless only defining an extension point is necessary:
+
+- AI trading coach
+- automatic trade recommendations
+- thinkorswim integration
+- Robinhood integration
+- live market prices
+- automatic market-data feeds
+- automatic level detection
+- automatic supply/demand detection
+- brokerage credentials
+- automated trading
+- options engine
+- complex tax-lot engine
+- push notification infrastructure
+- sophisticated attachment storage
+- shared household portfolios
+- shared financial workspaces
+- social trading
+- Redis
+- Kafka
+- microservices
+- Kubernetes
+
+Do not introduce infrastructure merely because AI can implement it.
+
+---
+
+# 35. Required Repository Review
+
+Before recommending implementation, inspect at minimum:
+
+- existing SQLAlchemy models;
+- Account model;
+- Investment model;
+- Transaction model;
+- Bill/Debt models where relevant;
+- Income Profile implementation;
+- internal user/workspace models;
+- workspace authorization helpers;
+- services;
+- schemas;
+- routes;
+- financial money helpers;
+- investment quantity helpers;
+- dashboard services;
+- export implementation;
+- backup documentation;
+- Alembic migrations;
+- test architecture;
+- PostgreSQL-specific tests;
+- frontend organization;
+- responsive UI conventions;
+- current API patterns.
+
+Do not infer these from this handoff when the repository can answer them.
+
+---
+
+# 36. Questions the Architecture Review Must Answer
+
+Return concrete answers/recommendations for the following.
+
+1. Which existing Serenity models can safely be reused?
+
+2. What exactly should happen to the current Investment model and existing Investment records?
+
+3. Should Portfolio be persisted or partly calculated/organizational?
+
+4. Should InvestmentAccount reuse/extend existing Account or remain separate?
+
+5. How should Checking → Brokerage → Trading transfers work without creating fake income/expense?
+
+6. How should fractional shares use the existing scaled quantity system?
+
+7. What quantity precision/range should be supported?
+
+8. What should the Instrument model contain?
+
+9. Should futures specifications use versioned rows, immutable snapshots, or another approach?
+
+10. How should historical trade calculations remain reproducible?
+
+11. What should the authoritative Trading Math Service API look like?
+
+12. How should LONG and SHORT calculations differ?
+
+13. How should mini and micro futures be represented?
+
+14. How should point, tick, and dollar conversions work?
+
+15. How should planned dollar risk be calculated?
+
+16. How should planned R:R be calculated?
+
+17. How should realized R be calculated?
+
+18. How should commissions/fees be represented?
+
+19. How should multiple entries be modeled?
+
+20. How should multiple exits be modeled?
+
+21. How should scaling in/out affect weighted-average entry/exit calculations?
+
+22. How should partially open positions be represented without storing conflicting derived state?
+
+23. How should fill quantities be reconciled to prevent impossible positions?
+
+24. Should v1 include any concept beyond fills for orders? Default assumption is no.
+
+25. How should a Market Level persist across multiple Trading Days?
+
+26. Should Level and Zone be separate models or generalized?
+
+27. How should analysis revision history work?
+
+28. How should Trading Day reference analyses/levels/plans?
+
+29. How should no-trade days be represented?
+
+30. How should Trade Reviews and Daily Journals relate?
+
+31. Should journaling use shared infrastructure or domain-specific records?
+
+32. How should the Attention Service consume domain dates/statuses without duplicating source records?
+
+33. How should stale market levels be identified for review?
+
+34. How should the Calendar/Timeline service consume Bills, Goals, Trading Plans, and other future dated records?
+
+35. What belongs on Dashboard versus dedicated Portfolio/Trading pages?
+
+36. How will every new entity preserve workspace authorization?
+
+37. How should cross-workspace relationship attacks be prevented?
+
+38. How should Profit Engine records participate in future exports?
+
+39. How should they participate in future workspace backup/restore?
+
+40. What database indexes will be necessary?
+
+41. Which historical endpoints require pagination from the beginning?
+
+42. Which calculations require PostgreSQL-specific tests?
+
+43. What migration risks exist?
+
+44. What existing tests are likely to require updates?
+
+45. What new tests are mandatory?
+
+46. What is the smallest safe implementation sequence?
+
+---
+
+# 37. Testing Expectations
+
+The architecture proposal should identify tests for at least:
+
+## Financial precision
+
+- fractional quantities;
+- large monetary values;
+- no floating-point drift.
+
+## Futures calculations
+
+- mini contract;
+- micro contract;
+- multiple contracts;
+- long;
+- short;
+- points;
+- ticks;
+- gross P&L;
+- fees;
+- net P&L;
+- planned R:R;
+- realized R.
+
+## Fill behavior
+
+- one entry / one exit;
+- one entry / multiple exits;
+- multiple entries / one exit;
+- multiple entries / multiple exits;
+- partially closed trade;
+- fully closed trade;
+- invalid over-exit;
+- weighted average calculations.
+
+## Ownership
+
+- Workspace A cannot read Workspace B.
+- Workspace A cannot modify Workspace B.
+- Workspace A cannot reference Workspace B's instrument-related private records where applicable.
+- Cross-workspace IDs cannot be used to create relationships.
+- Dashboard/attention output does not leak another workspace's data.
+- Export does not leak another workspace's data.
+
+## Market analysis
+
+- persistent levels;
+- status transitions;
+- revisions;
+- no-trade Trading Day.
+
+## Migration
+
+- existing Investment data preserved;
+- existing financial calculations remain correct;
+- rollback behavior is safe where supported.
+
+---
+
+# 38. Proposed Implementation Sequence — Review, Do Not Assume
+
+The current preferred sequence is:
+
+## Phase 0 — Architecture Review
+
+Current request.
+
+No Profit Engine production implementation.
+
+## Phase 1 — Instrument Registry + Trading Math
+
+Build and thoroughly test the mathematical foundation.
+
+Support:
+
+- stocks/ETFs;
+- fractional shares;
+- futures;
+- mini/micro specifications;
+- long/short calculations;
+- points;
+- ticks;
+- dollar risk;
+- P&L;
+- fees;
+- R:R.
+
+Minimal UI if any.
+
+## Phase 2 — Portfolio Foundation
+
+Potentially:
+
+- Portfolios;
+- Investment Accounts;
+- Holdings;
+- Investment Activity;
+- migration from placeholder Investments.
+
+Exact implementation depends on architecture review.
+
+## Phase 3 — Market Analysis
+
+- Instruments;
+- analyses;
+- revisions;
+- levels;
+- zones;
+- lifecycle.
+
+## Phase 4 — Trading Planning
+
+- Trading Accounts;
+- Trading Days;
+- Trading Plans;
+- referenced analyses/levels;
+- pre-market workflow.
+
+## Phase 5 — Execution + Journal
+
+- Trades;
+- Fills;
+- scaling;
+- partial exits;
+- trade reviews;
+- daily journal.
+
+## Phase 6 — Attention Engine + Unified Timeline
+
+- Today's Focus;
+- upcoming bills;
+- goals;
+- portfolio plans;
+- trading plans;
+- market-review reminders;
+- unified calendar/timeline.
+
+## Phase 7 — Analytics
+
+- performance;
+- setup statistics;
+- plan adherence;
+- rule adherence;
+- trading-day statistics;
+- portfolio analytics.
+
+Challenge this sequence if the repository reveals a concrete reason to change it.
+
+Explain the reason.
+
+---
+
+# 39. Long-Term Serenity Architecture
+
+Conceptually:
+
+```text
+                         SERENITY
+                            │
+         ┌──────────────────┼──────────────────┐
+         ▼                  ▼                  ▼
+ FINANCIAL ENGINE     PLANNING ENGINE      PROFIT ENGINE
+         │                  │                  │
+     Accounts              Goals        ┌──────┴───────┐
+   Transactions           Budget        ▼              ▼
+      Bills              Timeline    PORTFOLIO       TRADING
+      Debts             Projection      │              │
+      Income            Scenarios    Accounts      Instruments
+         │                           Holdings       Analysis
+         │                           Activity       Levels/Zones
+         │                              │           Plans
+         │                              │           Trading Days
+         │                              │           Trades
+         │                              │           Fills
+         │                              │           Journals
+         │                              │           Analytics
+         │                              │              │
+         └──────────────────┬───────────┴──────────────┘
+                            ▼
+                     ATTENTION ENGINE
+                            │
+                  ┌─────────┼─────────┐
+                  ▼         ▼         ▼
+                TODAY    CALENDAR   UPCOMING
+                            │
+                            ▼
+                       DASHBOARD
+```
+
+This is a conceptual north star, not permission to rewrite working Serenity architecture to match a diagram literally.
+
+---
+
+# 40. Daily User Experience North Star
+
+Eventually the user should open Serenity and immediately understand:
+
+```text
+TODAY'S FOCUS
+
+FINANCE
+- bills requiring attention
+- expected income
+- financial obligations
+
+GOALS
+- upcoming checkpoints
+- required contributions
+
+PORTFOLIO
+- planned contributions
+- important portfolio activity
+
+TRADING
+- today's planned trading session
+- pre-market review status
+- active market levels
+- levels requiring review
+- current trading plan
+```
+
+From there:
+
+```text
+OPEN SERENITY
+      ↓
+TODAY'S FOCUS
+      ↓
+ACT
+      ↓
+RECORD
+      ↓
+REVIEW
+      ↓
+JOURNAL
+      ↓
+ANALYZE
+      ↓
+PLAN AGAIN
+```
+
+The dashboard should not merely summarize the database.
+
+It should tell the user what part of Serenity requires attention.
+
+---
+
+# 41. Product Philosophy
+
+Serenity should eventually answer a much larger question than:
+
+> What did I spend?
+
+It should help answer:
+
+> What do I own?
+
+> What am I planning?
+
+> What requires my attention?
+
+> What financial decisions am I making?
+
+> Why did I make them?
+
+> What actually happened?
+
+> Did I follow my system?
+
+> Is my system working?
+
+The purpose is not to automate financial judgment.
+
+The purpose is to provide structured, accurate information so the user can make better-informed decisions.
+
+---
+
+# 42. FINAL POINT FOR CLAUDE — DEVELOPMENT DISCIPLINE
+
+This application is also being used as a software-engineering learning project.
+
+Do not let AI-generated complexity outrun the developer's ability to understand and maintain Serenity.
+
+For every proposed major component, explain:
+
+1. **What problem it solves.**
+2. **Why a new component/model is necessary.**
+3. **What inputs it receives.**
+4. **What it stores versus what it calculates.**
+5. **What output it produces.**
+6. **Which files/layers should own the behavior.**
+7. **How the developer can manually test it.**
+8. **What software-engineering concept the implementation demonstrates.**
+
+Prefer understandable architecture over impressive architecture.
+
+Do not introduce:
+
+- unnecessary abstraction;
+- unnecessary infrastructure;
+- unnecessary patterns;
+- generic frameworks for hypothetical future requirements;
+- large opaque modules;
+- dependencies simply because they are convenient for AI.
+
+New infrastructure must solve a demonstrated Serenity requirement and remain explainable by the developer.
+
+A good Serenity implementation is not one where AI generated the most code.
+
+A good implementation is one where:
+
+```text
+The developer can trace it.
+The developer can explain it.
+The developer can test it.
+The developer can troubleshoot it.
+The developer can modify it.
+The developer can deploy it.
+The developer can recover it.
+```
+
+Use one tested vertical slice at a time.
+
+Preserve educational comments and readability.
+
+When recommending a pattern the existing project does not currently use, explain why the existing architecture is insufficient before introducing the new pattern.
+
+---
+
+# 43. REQUIRED RESPONSE FROM THIS REVIEW
+
+Do not respond by implementing the entire design.
+
+Return a structured architecture review containing:
+
+### A. Current Repository Assessment
+What actually exists today based on repository inspection.
+
+### B. Existing Architecture That Can Be Reused
+Models/services/helpers/routes that should remain.
+
+### C. Conflicts / Technical Debt / Loose Ends
+Anything that should be resolved before or during Profit Engine development.
+
+### D. Current Investment Migration Recommendation
+Exact recommendation based on the real current implementation.
+
+### E. Proposed Profit Engine Domain Model
+Models, relationships, ownership boundaries, and important constraints.
+
+### F. Instrument + Trading Math Design
+Precision, specifications, futures conversion, fractional shares, fills, P&L, risk and R calculations.
+
+### G. Portfolio Design
+Portfolios, accounts, holdings, activity, transfers and valuation.
+
+### H. Trading Workflow Design
+Analysis → levels/zones → plan → Trading Day → trade → fills → review/journal.
+
+### I. Attention/Timeline Design
+How existing and future Serenity records produce Today's Focus and Calendar information without duplication.
+
+### J. Security / Workspace Isolation Review
+How every proposed relationship remains private.
+
+### K. Data Ownership / Export / Backup Impact
+How new data remains portable.
+
+### L. Performance Review
+Indexes, pagination, query boundaries and dashboard behavior.
+
+### M. Migration Strategy
+How the current application evolves without losing existing records.
+
+### N. Testing Plan
+Unit, service, API, authorization, PostgreSQL, browser and migration tests.
+
+### O. Recommended Implementation Phases
+Small, testable vertical slices.
+
+### P. Decisions Requiring Human Approval
+Anything that remains a genuine product/architecture decision.
+
+Do not silently choose items in section P.
+
+Return those decisions to the developer for review before implementation.
+
+---
+
+## Final instruction
+
+**Inspect first. Explain second. Recommend third. Implement only after architecture approval.**
+
+The Profit Engine is intended to become a major part of Serenity, but it must be built on top of the working application rather than replacing it.
+
+Preserve:
+
+- existing financial records;
+- workspace ownership;
+- authentication boundaries;
+- accurate arithmetic;
+- portability;
+- understandable architecture;
+- incremental testing;
+- and the developer's ability to maintain the system.
+
+The objective of this review is to make the next implementation phase smaller, safer, more accurate, and easier to understand—not to generate the largest possible redesign.

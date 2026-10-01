@@ -13,10 +13,19 @@ The current application tracks:
 - Recurring and one-time bills
 - Debts, including credit cards, with precise interest rates
 - Investments (temporary starting positions) with exact fractional quantities
+- Profit Engine Phase 1: workspace-private reference instruments with immutable
+  specification versions and an exact hypothetical calculator at `/profit-engine`
+  (not trades, live prices, holdings, postings, or net-worth changes)
+- Phase 2a organization-only work: private named portfolios and investment-account
+  containers linked to existing accounts; no holdings conversion, balance
+  movement, or change to dashboard/net-worth calculations
 - A dashboard with totals and net worth calculated from stored records
-- Edit and deactivate lifecycle controls; records are retained rather than hard-deleted
+- Edit controls and confirmed permanent deletion for bills, debts, and investments;
+  accounts and transaction/correction history retain their existing protections
 - Business and dependent labels for transaction context
-- Full JSON backup and transaction CSV export
+- Owner-scoped JSON export (format 3 includes instrument/specification history
+  and portfolio/container metadata)
+  and transaction CSV export; JSON export is not a verified restore/import tool
 
 ## Architecture
 
@@ -29,7 +38,8 @@ JavaScript. Money is stored as integer cents. Interest rates use thousandths of
 a percent, investment quantities use integer units with eight decimal places,
 and every timestamp is UTC.
 
-See `docs/architecture.md` and `docs/data-model.md` for details. For a
+See `docs/architecture.md`, `docs/data-model.md` and
+`docs/PROFIT_ENGINE_REVIEW.md` for implemented scope versus future proposals. For a
 non-Replit deployment, read `docs/HOSTING.md` first: the managed Clerk tenant
 cannot be exported and financial-record ownership needs a verified migration.
 
@@ -55,18 +65,21 @@ Replit supplies `DATABASE_URL` for its managed development and production
 PostgreSQL databases, and Serenity normalizes that URL for psycopg
 automatically.
 
-Before every Publish, run the prepublish check with an explicitly selected
-development database:
+Before every Publish, run the isolated prepublish check:
 
 ```bash
-SERENITY_DEVELOPMENT_DATABASE=1 bash scripts/prepublish_check.sh
+bash scripts/prepublish_check.sh
 ```
 
-The check refuses SQLite and refuses to run unless the development-database
-confirmation is explicit. It migrates the development database, confirms it is
-at the latest migration, and runs the tests. Replit Publish then compares and
-applies the development-to-production schema structure. This does not validate
-or transform production data automatically.
+The check ignores the caller's database URL and clears PostgreSQL connection
+settings. It requires real PostgreSQL migration/API tests in a disposable private
+Unix-socket cluster, including an upgrade to the latest migration, and the full
+Chromium browser suite. Missing tools fail rather than silently skipping tests.
+PostgreSQL is declared by the PostgreSQL module and Nix package in `.replit`;
+Python test dependencies are in `requirements.txt`. Restore these dependencies
+if the toolchain is missing. The named `test` validation runs this same script.
+No existing development or production database is migrated by this check.
+Applying production schema or data changes remains a separate publishing step.
 
 All financial pages, APIs, and exports require an authenticated Clerk user.
 Serenity's signed cookie binds to the verified Clerk session and user. On every
@@ -77,6 +90,21 @@ If Clerk's Backend API is unavailable, protected requests deny access until
 it recovers. Each request incurs a Clerk lookup (up to an 8-second timeout);
 there is no cross-request positive cache. Cookies issued before session binding
 are rejected, so users must sign in again after this update.
+
+Verified Clerk issuer and subject map to an internal Serenity user and a primary
+workspace. Financial `owner_id` is the workspace ID, not the Clerk user ID;
+inactive users cannot access records. See `docs/identity.md`. Migration 0011
+creates these tables on empty databases. On databases with existing financial
+rows, it refuses to rewrite owners without explicit, audited confirmation that
+all old IDs belong to the configured Clerk issuer. Back up and verify the
+database before this ownership migration; do not infer identity from email.
+Migration 0012 widens investment quantity storage on PostgreSQL.
+Migration 0014 additively creates instrument and specification tables without
+modifying existing investments; it rejects destructive rollback if instrument
+history exists. Migration 0015 adds empty portfolio/container tables and a
+unique `(owner_id, id)` Account index to support owner-matched relationships;
+it does not rebuild Accounts, migrate investments, or alter balances. Production
+schema updates are a separate publishing step, not authorized by local work.
 
 If an already-open page receives a protected API 401, the browser immediately
 removes displayed financial values and any unsaved form contents, then shows
