@@ -218,7 +218,7 @@ def test_sqlite_approved_conversion_migration_is_additive_and_owner_scoped(tmp_p
     with sqlite3.connect(path) as db:
         db.execute("PRAGMA foreign_keys = ON")
         assert db.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
-            "0022_publish_key_stage"
+            "0024_restore_publish_keys"
         )
         for owner, facts in records.items():
             assert db.execute(
@@ -351,7 +351,7 @@ def test_0017_converts_empty_early_text_0016_and_retains_approval_guards(tmp_pat
     assert upgrade.returncode == 0, upgrade.stderr
     with sqlite3.connect(path) as db:
         assert db.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
-            "0022_publish_key_stage"
+            "0024_restore_publish_keys"
         )
         assert db.execute(
             "SELECT type FROM pragma_table_info('reconciliation_approvals') "

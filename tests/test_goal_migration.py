@@ -5,6 +5,12 @@ import sqlite3
 import subprocess
 import sys
 
+import pytest
+from sqlalchemy import create_engine
+
+from models.goal import Goal
+from utils.choices import GOAL_PROGRESS_SOURCES
+
 
 def _alembic(database_path, *args):
     from conftest import TEST_CLERK_ISSUER
@@ -164,3 +170,146 @@ def test_empty_database_can_upgrade_and_downgrade_goal_core(tmp_path):
         assert connection.execute(
             "SELECT version_num FROM alembic_version"
         ).fetchone() == ("0017_portfolio_holdings",)
+
+
+def _insert_progress(connection, source, amount, active=True):
+    return connection.execute(
+        "INSERT INTO goals (owner_id, name, goal_type, category, progress_source, "
+        "current_progress_amount_cents, active, created_at, updated_at) "
+        "VALUES ('owner-a', 'Progress safeguard', 'SAVINGS', 'FINANCIAL', "
+        "?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        (source, amount, active),
+    ).lastrowid
+
+
+@pytest.fixture(scope="module", params=["migration", "model"])
+def goal_progress_database(request, tmp_path_factory):
+    path = tmp_path_factory.mktemp("goal-progress") / "goals.db"
+    if request.param == "migration":
+        result = _alembic(path, "upgrade", "head")
+        assert result.returncode == 0, result.stderr
+    else:
+        engine = create_engine(f"sqlite:///{path}")
+        Goal.__table__.create(engine)
+        engine.dispose()
+    return path
+
+
+@pytest.mark.parametrize("source", GOAL_PROGRESS_SOURCES)
+@pytest.mark.parametrize("amount", [None, 0, 12345, 100_000_000_000_000])
+@pytest.mark.parametrize("active", [True, False])
+def test_sqlite_raw_progress_insert_and_updates(
+    goal_progress_database, source, amount, active,
+):
+    with sqlite3.connect(goal_progress_database) as connection:
+        # Match runtime's legacy FK policy: the CHECK must not depend on it.
+        assert connection.execute("PRAGMA foreign_keys").fetchone() == (0,)
+        allowed = source == "MANUAL" or amount is None
+        if allowed:
+            goal_id = _insert_progress(connection, source, amount, active)
+            assert connection.execute(
+                "SELECT progress_source, current_progress_amount_cents, active "
+                "FROM goals WHERE id = ?", (goal_id,),
+            ).fetchone() == (source, amount, active)
+        else:
+            with pytest.raises(sqlite3.IntegrityError, match="ck_goals_manual_progress_only"):
+                _insert_progress(connection, source, amount, active)
+            goal_id = _insert_progress(connection, "MANUAL", amount, active)
+            # A source-only update cannot bypass enforcement.
+            with pytest.raises(sqlite3.IntegrityError, match="ck_goals_manual_progress_only"):
+                connection.execute(
+                    "UPDATE goals SET progress_source = ? WHERE id = ?",
+                    (source, goal_id),
+                )
+            connection.execute(
+                "UPDATE goals SET progress_source = ?, "
+                "current_progress_amount_cents = NULL WHERE id = ?",
+                (source, goal_id),
+            )
+            # An amount-only update cannot bypass enforcement either.
+            with pytest.raises(sqlite3.IntegrityError, match="ck_goals_manual_progress_only"):
+                connection.execute(
+                    "UPDATE goals SET current_progress_amount_cents = ? WHERE id = ?",
+                    (amount, goal_id),
+                )
+        connection.rollback()
+
+
+def _goal_snapshot(connection):
+    tables = ("goals", "goal_items", "goal_milestones", "goal_checkpoints", "accounts", "debts")
+    return {
+        table: connection.execute(f"SELECT * FROM {table} ORDER BY id").fetchall()
+        for table in tables
+    }
+
+
+def test_progress_migration_preserves_rows_and_sqlite_relationship_guards(tmp_path):
+    path = tmp_path / "preserve-progress.db"
+    result = _alembic(path, "upgrade", "0022_publish_key_stage")
+    assert result.returncode == 0, result.stderr
+    with sqlite3.connect(path) as connection:
+        _seed_pre_goal_financial_rows(connection)
+        goal_id = _insert_progress(connection, "MANUAL", 0)
+        _insert_progress(connection, "MANUAL", 100_000_000_000_000, False)
+        _insert_progress(connection, "ACCOUNT_BALANCE", None, False)
+        for table, column, value in (
+            ("goal_items", "name", "Keep item"),
+            ("goal_milestones", "title", "Keep milestone"),
+            ("goal_checkpoints", "amount_cents", 0),
+        ):
+            connection.execute(
+                f"INSERT INTO {table} (owner_id, goal_id, {column}, created_at, updated_at) "
+                "VALUES ('owner-a', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                (goal_id, value),
+            )
+        connection.commit()
+        before = _goal_snapshot(connection)
+        triggers = connection.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name"
+        ).fetchall()
+        indexes = connection.execute("PRAGMA index_list(goals)").fetchall()
+
+    for command in (
+        ("upgrade", "head"), ("downgrade", "0022_publish_key_stage"), ("upgrade", "head"),
+    ):
+        result = _alembic(path, *command)
+        assert result.returncode == 0, result.stderr
+        with sqlite3.connect(path) as connection:
+            assert _goal_snapshot(connection) == before
+            assert connection.execute(
+                "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name"
+            ).fetchall() == triggers
+            assert connection.execute("PRAGMA index_list(goals)").fetchall() == indexes
+            with pytest.raises(sqlite3.IntegrityError, match="Explicitly remove Goal composition"):
+                connection.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
+            with pytest.raises(sqlite3.IntegrityError, match="owner must match"):
+                connection.execute(
+                    "UPDATE goal_items SET owner_id = 'owner-b' WHERE goal_id = ?", (goal_id,),
+                )
+            connection.rollback()
+
+
+@pytest.mark.parametrize("amount", [0, 12345])
+@pytest.mark.parametrize("active", [True, False])
+def test_progress_migration_refuses_historical_conflicts_without_repair(tmp_path, amount, active):
+    path = tmp_path / "unsupported-progress.db"
+    result = _alembic(path, "upgrade", "0022_publish_key_stage")
+    assert result.returncode == 0, result.stderr
+    with sqlite3.connect(path) as connection:
+        _insert_progress(connection, "ACCOUNT_BALANCE", amount, active)
+        connection.commit()
+        before = _goal_snapshot(connection)
+        schema = connection.execute(
+            "SELECT name, sql FROM sqlite_master ORDER BY name"
+        ).fetchall()
+    refused = _alembic(path, "upgrade", "head")
+    assert refused.returncode != 0
+    assert "preserve records and obtain explicit owner review" in refused.stderr
+    with sqlite3.connect(path) as connection:
+        assert _goal_snapshot(connection) == before
+        assert connection.execute(
+            "SELECT name, sql FROM sqlite_master ORDER BY name"
+        ).fetchall() == schema
+        assert connection.execute(
+            "SELECT version_num FROM alembic_version"
+        ).fetchone() == ("0022_publish_key_stage",)

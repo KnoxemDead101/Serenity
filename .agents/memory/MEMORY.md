@@ -12,3 +12,4 @@
 - [Profit Engine boundaries](profit-engine-boundaries.md) — expand incrementally; reconcile legacy investments before conversion and preserve historical specification meaning.
 - [Reconciliation preview boundary](reconciliation-preview-boundary.md) — disposable signed reports are review evidence, never conversion approval; account completeness needs explicit attestation.
 - [Publish FK prerequisites](publish-fk-prerequisites.md) — check the actual Publish diff for both parent-key presence and ordering; passing Alembic migrations are not enough.
+- [Publish review access](publish-review-access.md) — if the schema comparison is unavailable, request a credential-free UI summary; do not infer an empty diff.

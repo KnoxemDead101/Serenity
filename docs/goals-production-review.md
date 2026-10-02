@@ -1,5 +1,47 @@
 # Published Goals: read-only progress review
 
+## Latest result after owner-reported publication
+
+The owner reported, "Published successfully, continue next steps." The agent
+did not initiate publication or change deployment/storage configuration.
+Deployment metadata then confirmed an active, successful private Autoscale
+publication. The production read-only PostgreSQL connection confirmed
+`public.goals` exists, all three required columns are visible, and the
+connection is a replica (`pg_is_in_recovery() = true`).
+
+With the owner's renewed aggregate-only authorization, the query documented
+below was executed successfully against `environment: "production"`:
+
+| Affected records | Count |
+| --- | ---: |
+| Total | 0 |
+| Active | 0 |
+| Archived | 0 |
+| With a non-null zero progress amount | 0 |
+
+The exact predicate was `progress_source <> 'MANUAL' AND
+current_progress_amount_cents IS NOT NULL`. Active and archived records,
+non-null zero amounts, and all dates were included. No enforcement cutoff was
+assumed. These are counts of unsupported source/amount combinations, **not**
+a count of all Goals. No individual records, identities, financial amounts,
+or financial totals were retrieved.
+
+The observed storage is the Replit-managed production PostgreSQL replica, not
+local SQLite or development. The current deployment command and runtime-managed
+database selection are consistent with that storage. The earlier absence was
+a real schema difference in the replica, not ordinary table-permission
+filtering; it resolved after the owner-reported publication. The available
+evidence does not distinguish when Publish applied the schema from when its
+replica caught up. It also does not independently inspect the running app's
+connection or verify the signed-in Goals UI. No authentication bypass or
+credential access was attempted.
+
+All records were preserved by this review. No source was changed and no
+amount was cleared. No automatic progress, Goal Composition, or Transaction
+linkage was added. The sections below retain the earlier diagnostic sequence;
+their unavailable-count and blocked-check statements describe the state
+**before** this successful post-publication check.
+
 ## Authorization and scope
 
 The user explicitly authorized a read-only, aggregate-only check of published
@@ -7,7 +49,7 @@ Goal data. This authorization did not permit any record or configuration changes
 The earlier development review found an existing Goals table with zero records;
 that result does not establish the state of published data.
 
-## Storage and observed result
+## Initial storage and observed result (before publication)
 
 The deployment metadata confirmed an active published deployment with a successful
 build. Project instructions identify Replit-managed PostgreSQL as production
@@ -40,6 +82,96 @@ The metadata result alone cannot distinguish a missing production table from
 restricted visibility or replica differences. No Goal-row query was attempted
 after the table-existence check failed.
 
+## Follow-up storage diagnosis (2026-10-02)
+
+Read-only deployment metadata reports an active, successful **private**
+Autoscale publication. The current workspace deployment command in `.replit`
+runs Uvicorn without a SQLite override. The database
+selector uses `DATABASE_URL` when present; the environment metadata identifies
+that key as runtime-managed and present for production. No credential value
+was accessed. Project instructions identify managed PostgreSQL as intended
+production storage. The explicit SQLite override belongs to local development.
+
+These observations establish the intended/current workspace configuration,
+**not independent verification of the running published process's database
+connection or its deployed source revision**. The private publication was not
+accessed with a signed-in session or bypassed.
+
+Additional schema-only queries returned:
+
+```sql
+-- Production read-only connection; no Goal rows accessed.
+SELECT
+    EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = 'goals' AND c.relkind IN ('r', 'p')
+    ) AS goals_in_catalog,
+    EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'goals' AND table_type = 'BASE TABLE'
+    ) AS goals_visible,
+    pg_is_in_recovery() AS is_replica;
+-- false, false, true
+
+-- Managed development connection; schema existence only, no row counts.
+SELECT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relname = 'goals' AND c.relkind IN ('r', 'p')
+) AS public_goals_in_catalog;
+-- true
+```
+
+The catalog result rules out ordinary `information_schema` privilege filtering
+as the explanation in this replica: no ordinary or partitioned Goals table is
+present anywhere in its catalog. There is a development/production-replica
+schema difference. An unpublished schema or replica lag remains possible;
+neither its cause nor live-primary table absence is proven by these results.
+Counts remain **unavailable, not zero**.
+
+Next steps require separate owner decisions:
+
+1. Confirm the live publication's database selection in Publishing without
+   sharing credentials. If managed PostgreSQL is confirmed, review its
+   development-to-production schema changes using the supported Publish UI.
+   Obtain separate authorization before any publication/schema action.
+   Do not select overwrite-data, approve destructive changes, add startup DDL,
+   or run production Alembic as part of this diagnosis.
+2. Obtain renewed explicit permission for a read-only aggregate-only check.
+   Reconfirm table existence and required columns before executing it.
+   Report total, active, archived, and zero-amount affected record counts
+   using the exact predicate below and all dates. No enforcement cutoff
+   has been verified.
+
+No publication, migration, configuration change, or Goal-row query occurred
+during this follow-up diagnosis. The aggregate check is still incomplete.
+
+### Renewed authorization and initially blocked Publish review
+
+The owner renewed explicit permission for both the read-only Publish schema
+comparison and the production aggregate-only check. This did **not** authorize
+publishing, schema changes, configuration changes, or record corrections.
+
+The renewed production catalog check returned `public_goals_exists = false`,
+`goals_any_schema_exists = false`, and `is_replica = true`. Consequently the
+aggregate query was again not executed. All affected counts remain unavailable.
+
+The documented read-only Publish comparison operation was unavailable in this
+agent session; no comparison ran and no schema changes were applied. This is
+not evidence that the schemas match or that publishing is safe.
+
+At that point, completion was blocked pending a credential-free Publishing UI confirmation of
+the live storage selection and its pending schema-change summary. Review any
+drop, truncate, destructive alteration, or rename carefully; never select
+overwrite-data. Any actual publication requires separate owner approval and
+the supported Publish process. Afterward, reconfirm table and column existence
+before the authorized aggregate-only query. This task must not be reported as
+complete while live storage and aggregate results remain unverified.
+
 ## Current application rule
 
 Reviewed `models/goal.py`, `schemas/goal.py`, `services/goal_service.py`,
@@ -50,7 +182,9 @@ Reviewed `models/goal.py`, `schemas/goal.py`, `services/goal_service.py`,
 - Create/update input validation rejects a non-MANUAL source paired with any
   non-null progress amount, including zero; the form also blocks submission.
 - The model constrains amounts and source choices separately, but does not
-  include a database check coupling the source to the amount.
+  include a database check coupling the source to the amount in the version
+  examined during that production review. The development safeguard below
+  supersedes that workspace observation, not the historical production evidence.
 - The service preserves null versus zero and returns existing stored amounts;
   it does not silently repair unsupported historical combinations.
 - These are workspace code observations, not proof of which version or rule
@@ -59,22 +193,25 @@ Reviewed `models/goal.py`, `schemas/goal.py`, `services/goal_service.py`,
 No verified production enforcement cutoff was established. Commit dates were
 not used to exclude records.
 
-## Count definition for a later authorized check
+## Executed aggregate count definition
 
-If the published table becomes visible, first confirm its existence again,
-then use a read-only aggregate query:
+After the owner reported publication, the production table and required
+columns were confirmed before executing this read-only aggregate query:
 
 ```sql
 SELECT
     COUNT(*) AS affected_total,
     COUNT(*) FILTER (WHERE active IS TRUE) AS affected_active,
-    COUNT(*) FILTER (WHERE active IS FALSE) AS affected_archived
+    COUNT(*) FILTER (WHERE active IS FALSE) AS affected_archived,
+    COUNT(*) FILTER (
+        WHERE current_progress_amount_cents = 0
+    ) AS affected_zero_amount
 FROM public.goals
 WHERE progress_source <> 'MANUAL'
   AND current_progress_amount_cents IS NOT NULL;
 ```
 
-This query was **not executed**. It includes active and archived Goals, all
+This query was **executed successfully after publication**. It includes active and archived Goals, all
 dates, and non-null zero amounts. It returns record counts only: no names,
 notes, IDs, owner identities, individual amounts, or financial totals.
 
@@ -87,3 +224,56 @@ an amount requires explicit authorization; this check does not authorize either.
 No records were cleared, relabeled, deleted, migrated, or rewritten. No database
 configuration or storage was changed. No automatic progress, Goal Composition,
 or Transaction linkage was implemented or modified.
+
+## Development persistence safeguard (2026-10-02)
+
+The owner separately authorized code, tests, and development schema work.
+The model and migration `0023_goal_progress_guard` now declare the named check
+`ck_goals_manual_progress_only`:
+
+```sql
+CHECK (progress_source = 'MANUAL' OR current_progress_amount_cents IS NULL)
+```
+
+The authorized development PostgreSQL upgrade completed successfully at this
+revision, and schema inspection confirmed the named check. No production
+connection was queried or migrated during this development work.
+
+This permits MANUAL null, zero, and valid positive amounts, and reserved sources
+only with null amounts. Existing source-choice and amount-range checks remain.
+It applies to direct inserts and updates, including source-only changes and
+archived Goals, not just form/API submissions.
+
+Development Alembic preflights all historical Goals, serializing PostgreSQL
+writes during enforcement. It refuses incompatible data without printing record
+details, clearing amounts, or relabeling sources. SQLite runs as a maintenance
+operation with writers stopped; its transactional parent rebuild preserves
+existing child records, indexes, constraints, and Goal relationship triggers.
+Downgrade removes only the new check and preserves records.
+
+### Production rollout remains separately gated
+
+This authorization does **not** approve publication, production record queries,
+or data corrections. The prior zero counts above are historical observations,
+not a fresh rollout preflight and not assurance that no affected rows exist now.
+
+Before any rollout:
+
+1. Obtain renewed explicit authorization for the read-only aggregate-only query
+   above; reconfirm the production table and required columns first. Include all
+   dates, active/archived records, and non-null zero. Do not retrieve record details.
+2. If any affected rows exist, stop. Preserve them and request a separately
+   authorized owner correction plan; do not clear amounts or change sources.
+3. Apply/review the development schema using the existing development Alembic
+   flow, then review the actual Publish comparison. Confirm it carries the named
+   check without destructive record/table operations or unrelated schema changes.
+   If the comparison is unavailable, obtain a credential-free UI summary.
+4. Obtain separate production publication approval and use managed Publish.
+   Never run production Alembic, direct production DDL, startup/build schema
+   hooks, or overwrite-data. Publish validates existing rows when adding the
+   check; the development preflight is not a production migration script.
+5. After publication, verify the named production constraint through a separately
+   authorized schema-only check. Do not test by inserting financial records.
+
+No automatic progress, new composition, or transaction linkage is part of this
+safeguard. Existing composition must remain unchanged.

@@ -83,3 +83,57 @@ replay, API/service/bulk refusal, wrong/unvalidated FK refusal, and synthetic
 signed-in browser behavior passed. The managed Serenity preview restarted
 successfully; its unauthenticated sign-in page was visually verified.
 Actual published sign-in remains the separate existing verification item.
+
+## Second-release preparation (2026-10-02)
+
+A fresh schema-only production replica query confirmed all four prerequisite
+parent unique constraints, including exact columns and validated status.
+The seven staged ownership foreign keys remain absent in production. Deployment
+metadata reports an active successful private publication; build success alone
+is not evidence of restored ownership protections.
+
+Forward development migration `0024_restore_publish_keys` restored all seven
+references. Before/after server-side record digests and counts matched across
+**all 22 owner-scoped tables**. No individual records, identities, values, or
+financial totals were returned. Development write safety now reports `NORMAL`;
+production restoration has not been performed. Downgrading this revision keeps
+the restored references rather than silently removing ownership protection.
+
+The fresh second-release comparison is captured in
+`tests/fixtures/publish_stage2_schema_diff.json`: **12 statements**, no warnings,
+no structural-data-loss flag, and no dropped/truncated tables or columns:
+
+- Four `DROP INDEX` statements for redundant standalone `ux_*` parent indexes.
+- Seven ownership foreign-key additions.
+- The separately merged `ck_goals_manual_progress_only` check.
+
+The four legacy indexes exist in both database catalogs. In development the
+restored foreign keys bind to them; in production no foreign keys currently
+depend on those four indexes. The actual comparison nevertheless proposes their
+removal. Each matching true `uq_*` unique constraint was independently confirmed
+in production and remains in the generated plan. Exact-order isolated replay
+passes, preserves prior account/Goal rows, and proves all seven new references
+bind to true parent unique constraints afterward.
+
+**Required review before the second Publish:** these index removals were not
+part of the original seven-key staging approval. Obtain explicit owner review
+of the four redundant index removals. The bundled Goal check also requires
+renewed permission for the documented production aggregate-only preflight;
+the earlier zero counts are not a current rollout preflight. Do not retrieve
+record details, silently correct records, or infer authorization from a task
+being queued. If unsupported Goals exist, stop and preserve them.
+
+After this review, a passing full publishing gate, and the owner's second
+Publish, verify every restored production FK definition and validated status
+through read-only queries. Only then declare the repair complete and begin the
+approved Serenity Next trust/personal-operating-system waves without routine
+slice re-authorization.
+
+The second-release full required gate passed on 2026-10-02: **951 passed,
+0 failed, 2 skipped**. The exact first/second Publish replay, forward
+restoration, historical downgrade preservation, direct database Goal guards,
+and required PostgreSQL/browser checks passed. A duplicate root app workflow
+was removed after it conflicted with the managed artifact's port; Run now
+targets the managed Serenity service. That service is running and the real
+unauthenticated sign-in page was visually verified. Signed-in production UI
+was not verified. No production DDL or production record query was performed.

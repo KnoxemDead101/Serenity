@@ -139,7 +139,7 @@ def test_postgres_composition_downgrade_refuses_each_populated_family_before_any
     with pg_engine.connect() as connection:
         assert connection.scalar(text(
             "SELECT version_num FROM alembic_version"
-        )) == "0022_publish_key_stage"
+        )) == "0024_restore_publish_keys"
         assert table in inspect(pg_engine).get_table_names()
         assert connection.scalar(text(f"SELECT COUNT(*) FROM {table}")) == 1
 

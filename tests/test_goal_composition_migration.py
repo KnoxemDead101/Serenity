@@ -70,7 +70,7 @@ def test_0019_upgrade_adds_only_composition_tables_and_preserves_existing_rows(
         }
         assert connection.execute(
             "SELECT version_num FROM alembic_version"
-        ).fetchone() == ("0022_publish_key_stage",)
+        ).fetchone() == ("0024_restore_publish_keys",)
         assert connection.execute(
             "SELECT name FROM goals WHERE id = ?", (goal_id,)
         ).fetchone() == ("Preserved goal",)

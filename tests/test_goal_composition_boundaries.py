@@ -309,8 +309,16 @@ def test_legacy_reserved_source_with_nonnull_progress_keeps_checkpoint_unknown(
     goal = create_goal(client, current_progress_amount="50.00")
     checkpoint = create_child(client, goal["id"], "checkpoints", {"amount": "0.00"})
     row = db.get(Goal, goal["id"])
-    row.progress_source = "PORTFOLIO_VALUE"
-    db.commit()
+    # This deliberately represents data from before the persistence guard.
+    # Disable checks only while seeding this isolated SQLite legacy fixture;
+    # restore enforcement before exercising the reader. Never repair the row.
+    db.execute(text("PRAGMA ignore_check_constraints = ON"))
+    try:
+        row.progress_source = "PORTFOLIO_VALUE"
+        db.commit()
+    finally:
+        db.execute(text("PRAGMA ignore_check_constraints = OFF"))
+        db.commit()
 
     current = client.get(
         child_url(goal["id"], "checkpoints", checkpoint["id"]),

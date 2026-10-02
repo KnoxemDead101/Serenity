@@ -136,7 +136,7 @@ def test_postgres_portfolio_constraints_and_safe_downgrade(postgres_url, pg_engi
     assert "Cannot downgrade 0015" in refused.stderr
     with pg_engine.connect() as connection:
         # Alembic keeps the complete upgraded head after the failed downgrade.
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0022_publish_key_stage"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0024_restore_publish_keys"
         assert {
             "reconciliation_approvals",
             "opening_positions",

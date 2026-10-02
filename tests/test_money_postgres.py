@@ -300,7 +300,7 @@ def test_postgres_approved_conversion_migration_is_additive_and_owner_scoped(
     with pg_engine.connect() as connection:
         assert connection.scalar(text(
             "SELECT version_num FROM alembic_version"
-        )) == "0022_publish_key_stage"
+        )) == "0024_restore_publish_keys"
         for owner, facts in records.items():
             assert connection.scalar(text(
                 "SELECT opening_balance_cents FROM accounts WHERE id = :id"
@@ -369,7 +369,7 @@ def test_postgres_approved_conversion_migration_is_additive_and_owner_scoped(
     with pg_engine.connect() as connection:
         assert connection.scalar(text(
             "SELECT version_num FROM alembic_version"
-        )) == "0022_publish_key_stage"
+        )) == "0024_restore_publish_keys"
         assert connection.scalar(text(
             "SELECT opening_balance_cents FROM accounts WHERE id = :id"
         ), {"id": a["account"]}) == a["balance"]

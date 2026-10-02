@@ -19,3 +19,15 @@ when Publish started at the repository root, causing Uvicorn to fail importing
 or `../..`, then starts Uvicorn with `--app-dir` set to that location. Verify
 the exact command from both directories. Avoid a pip-install build step because
 publishing installs root requirements automatically.
+
+Use one managed application workflow rather than a second root workflow for the
+same artifact service.
+
+**Why:** Workflow reconciliation after merges restarted both processes on the
+same injected port, leaving the artifact preview failed with address-in-use
+even while the duplicate root process was serving.
+
+**How to apply:** Route the Run group to the existing managed artifact workflow,
+remove the duplicate root workflow, and restart the managed service once.
+Changes to root `.replit` also require a complete temporary TOML plus
+`verifyAndReplaceDotReplit`; ordinary patches are rejected.

@@ -48,6 +48,10 @@ class Goal(Base):
             name="ck_goals_current_progress_amount_cents",
         ),
         CheckConstraint(
+            "progress_source = 'MANUAL' OR current_progress_amount_cents IS NULL",
+            name="ck_goals_manual_progress_only",
+        ),
+        CheckConstraint(
             "(status = 'COMPLETED' AND completed_at IS NOT NULL) OR "
             "(status <> 'COMPLETED' AND completed_at IS NULL)",
             name="ck_goals_completed_at_status",

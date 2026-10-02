@@ -3,7 +3,7 @@
 import pytest
 import json
 from pathlib import Path
-from sqlalchemy import delete, text
+from sqlalchemy import delete, inspect, text
 from sqlalchemy.orm import Session
 
 from migrations.publish_key_references import REFERENCES
@@ -163,3 +163,94 @@ def test_exact_first_publish_plan_replays_without_reordering(
                 "SELECT count(*) FROM pg_constraint WHERE contype='u' "
                 "AND conrelid=to_regclass(:table) AND conname=:name"
             ), {"table": table, "name": f"uq_{table}_{'_'.join(columns)}"}) == 1
+
+
+def test_forward_restoration_preserves_records_and_keeps_keys_on_downgrade(
+    postgres_url, pg_engine,
+):
+    _alembic(postgres_url, "upgrade", "0023_goal_progress_guard")
+    with pg_engine.begin() as connection:
+        assert write_state(connection) == "READ_ONLY"
+        connection.execute(text(
+            "INSERT INTO accounts (owner_id,name,account_type,classification,"
+            "opening_balance_cents,active,created_at,updated_at) VALUES "
+            "('restoration-test','Synthetic prior account','Checking','Personal',"
+            "12345,true,now(),now())"
+        ))
+        before = connection.execute(text(
+            "SELECT row_to_json(a)::text FROM accounts a ORDER BY id"
+        )).scalars().all()
+    _alembic(postgres_url, "upgrade", "0024_restore_publish_keys")
+    with pg_engine.connect() as connection:
+        assert write_state(connection) == "NORMAL"
+        assert connection.execute(text(
+            "SELECT row_to_json(a)::text FROM accounts a ORDER BY id"
+        )).scalars().all() == before
+    _alembic(postgres_url, "downgrade", "0023_goal_progress_guard")
+    with pg_engine.connect() as connection:
+        assert write_state(connection) == "NORMAL"
+
+
+def test_exact_second_publish_plan_preserves_rows_and_restores_valid_keys(
+    postgres_url, pg_engine,
+):
+    fixtures = Path(__file__).parent / "fixtures"
+    first = json.loads((fixtures / "publish_stage1_schema_diff.json").read_text())
+    second = json.loads((fixtures / "publish_stage2_schema_diff.json").read_text())
+    assert second["success"] and not second["hasStructuralDataLoss"]
+    assert not second["warnings"]
+    for field in (
+        "tablesToRemove", "tablesToTruncate", "columnsToRemove",
+        "schemasToRemove", "matViewsToRemove",
+    ):
+        assert not second[field]
+    assert len(second["statementsToExecute"]) == 12
+    _alembic(postgres_url, "upgrade", "0014_instrument_registry")
+    with pg_engine.begin() as connection:
+        for statement in first["statementsToExecute"]:
+            connection.exec_driver_sql(statement)
+        assert write_state(connection) == "READ_ONLY"
+        connection.execute(text(
+            "INSERT INTO accounts (owner_id,name,account_type,classification,"
+            "opening_balance_cents,active,created_at,updated_at) VALUES "
+            "('second-replay','Synthetic preserved account','Checking','Personal',"
+            "54321,true,now(),now())"
+        ))
+        connection.execute(text(
+            "INSERT INTO goals (owner_id,name,goal_type,category,progress_source,"
+            "current_progress_amount_cents,active,created_at,updated_at) VALUES "
+            "('second-replay','Synthetic preserved goal','SAVINGS','FINANCIAL',"
+            "'MANUAL',0,false,now(),now())"
+        ))
+        before = {
+            table: connection.execute(text(
+                f"SELECT row_to_json(r)::text FROM {table} r ORDER BY id"
+            )).scalars().all()
+            for table in ("accounts", "goals")
+        }
+        for number, statement in enumerate(second["statementsToExecute"], 1):
+            try:
+                connection.exec_driver_sql(statement)
+            except Exception as error:
+                raise AssertionError(f"Second Publish statement {number} failed") from error
+        assert write_state(connection) == "NORMAL"
+        for table, rows in before.items():
+            assert connection.execute(text(
+                f"SELECT row_to_json(r)::text FROM {table} r ORDER BY id"
+            )).scalars().all() == rows
+        assert "ck_goals_manual_progress_only" in {
+            check["name"] for check in inspect(connection).get_check_constraints("goals")
+        }
+        # Every restored FK must use a true prerequisite constraint, not the
+        # removed redundant standalone indexes. Inspect actual PostgreSQL binding.
+        assert connection.scalar(text(
+            "SELECT count(*) FROM pg_constraint fk "
+            "JOIN pg_constraint parent ON parent.conindid=fk.conindid "
+            "AND parent.contype='u' WHERE fk.contype='f' AND fk.conname IN "
+            "('fk_opening_positions_owner_account','fk_opening_positions_owner_source',"
+            "'fk_opening_positions_owner_instrument',"
+            "'fk_opening_positions_owner_specification',"
+            "'fk_investment_accounts_owner_account',"
+            "'fk_cash_reconciliation_entries_owner_account',"
+            "'fk_valuation_eligibility_owner_source')"
+        )) == 7
