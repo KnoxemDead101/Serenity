@@ -5,6 +5,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from test_money_postgres import _alembic, pg_client, pg_engine, postgres_url  # noqa: F401
+from tests.migration_helpers import current_head
 
 
 def _goal(client):
@@ -139,7 +140,7 @@ def test_postgres_composition_downgrade_refuses_each_populated_family_before_any
     with pg_engine.connect() as connection:
         assert connection.scalar(text(
             "SELECT version_num FROM alembic_version"
-        )) == "0024_restore_publish_keys"
+        )) == current_head()
         assert table in inspect(pg_engine).get_table_names()
         assert connection.scalar(text(f"SELECT COUNT(*) FROM {table}")) == 1
 

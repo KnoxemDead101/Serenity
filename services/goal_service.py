@@ -14,6 +14,7 @@ from utils.choices import (
 )
 from utils.money import cents_to_dollars, dollars_to_cents
 from utils.validators import require_choice
+from models.work import Project
 
 
 class GoalNotFound(LookupError):
@@ -143,15 +144,16 @@ def delete_goal(db: Session, goal_id: int, owner_id: str) -> None:
         select(GoalCheckpoint.id).where(
             GoalCheckpoint.goal_id == goal.id,
         ).exists(),
+        select(Project.id).where(Project.goal_id == goal.id).exists(),
     )))
     if has_children:
-        raise GoalConflict("Delete all goal items, milestones, and checkpoints before deleting this goal")
+        raise GoalConflict("Delete all goal items, milestones, and checkpoints and unlink projects before deleting this goal")
     db.delete(goal)
     try:
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise GoalConflict("Delete all goal items, milestones, and checkpoints before deleting this goal") from exc
+        raise GoalConflict("Delete all goal items, milestones, and checkpoints and unlink projects before deleting this goal") from exc
 
 
 def to_goal_read(goal: Goal) -> GoalRead:

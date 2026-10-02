@@ -1,0 +1,14 @@
+/* Projects and Tasks: small additions to the shared Serenity styles. */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.work-filters { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; margin-bottom: 12px; }
+.work-check { display: flex; align-items: center; gap: 8px; min-height: var(--touch-target); }
+.work-error { margin-bottom: 12px; }
+.work-details-grid { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 16px; }
+.work-details-grid dt { color: var(--muted); }
+.work-details-grid dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+a.button { min-height: 0; }
+.row-actions a.button { padding: 5px 9px; font-size: 0.9rem; }
+@media (max-width: 720px) {
+  .row-actions a.button { padding: 8px 12px; min-height: var(--touch-target); display: inline-flex; align-items: center; }
+  .work-details-grid { grid-template-columns: 1fr; }
+}

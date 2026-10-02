@@ -11,6 +11,7 @@ from schemas.portfolio import InvestmentAccountWrite
 from services import portfolio_service
 
 from test_money_postgres import _alembic, pg_client, pg_engine, postgres_url  # noqa: F401
+from tests.migration_helpers import current_head
 
 
 def test_concurrent_move_then_archive_cannot_reactivate_from_stale_parent(
@@ -136,7 +137,7 @@ def test_postgres_portfolio_constraints_and_safe_downgrade(postgres_url, pg_engi
     assert "Cannot downgrade 0015" in refused.stderr
     with pg_engine.connect() as connection:
         # Alembic keeps the complete upgraded head after the failed downgrade.
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0024_restore_publish_keys"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == current_head()
         assert {
             "reconciliation_approvals",
             "opening_positions",

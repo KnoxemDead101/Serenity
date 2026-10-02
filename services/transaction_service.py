@@ -139,6 +139,14 @@ def list_transactions(
     ).order_by(Transaction.date.desc(), Transaction.id.desc())))
 
 
+def list_workspace_transactions(db: Session, owner_id: str) -> list[Transaction]:
+    """Read actual, non-deleted workspace entries, including orphaned imports."""
+    return list(db.scalars(select(Transaction).where(
+        Transaction.owner_id == require_owner_id(owner_id),
+        Transaction.deleted_at.is_(None),
+    ).order_by(Transaction.id)))
+
+
 def get_transaction(
     db: Session, account_id: int, transaction_id: int,
     owner_id: str,

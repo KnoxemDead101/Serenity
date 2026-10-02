@@ -59,7 +59,7 @@ def test_0019_upgrade_adds_only_composition_tables_and_preserves_existing_rows(
         connection.commit()
         before = _tables(connection)
 
-    upgraded = _alembic(path, "upgrade", "head")
+    upgraded = _alembic(path, "upgrade", "0026_system_observations")
     assert upgraded.returncode == 0, upgraded.stderr
     with sqlite3.connect(path) as connection:
         assert _tables(connection) == before | {
@@ -67,10 +67,12 @@ def test_0019_upgrade_adds_only_composition_tables_and_preserves_existing_rows(
             "valuation_eligibility", "cash_reconciliation_entries",
             "conversion_events",
             "goal_items", "goal_milestones", "goal_checkpoints",
+            "projects", "tasks",
+            "system_observations",
         }
         assert connection.execute(
             "SELECT version_num FROM alembic_version"
-        ).fetchone() == ("0024_restore_publish_keys",)
+        ).fetchone() == ("0026_system_observations",)
         assert connection.execute(
             "SELECT name FROM goals WHERE id = ?", (goal_id,)
         ).fetchone() == ("Preserved goal",)
@@ -86,7 +88,7 @@ def test_composition_downgrade_refuses_each_nonempty_child_table_before_dropping
     tmp_path, table,
 ):
     path = tmp_path / f"composition-{table}.db"
-    upgraded = _alembic(path, "upgrade", "head")
+    upgraded = _alembic(path, "upgrade", "0026_system_observations")
     assert upgraded.returncode == 0, upgraded.stderr
     with sqlite3.connect(path) as connection:
         goal_id = _insert_goal(connection)
@@ -124,7 +126,9 @@ def test_composition_downgrade_refuses_each_nonempty_child_table_before_dropping
         ).fetchall()) == {
             ("0017_conversion_guards",), ("0019_goal_composition",),
         }
-        assert _tables(connection) == before_tables
+        # SQLite DDL is not transactional: later empty work tables may already
+        # be removed before this older composition preservation gate refuses.
+        assert _tables(connection) == before_tables - {"projects", "tasks", "system_observations"}
         assert connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 1
         assert connection.execute(
             "SELECT name FROM goals WHERE id = ?", (goal_id,)
@@ -138,7 +142,7 @@ def test_empty_child_downgrade_preserves_parent_goals_and_financial_rows(tmp_pat
     with sqlite3.connect(path) as connection:
         goal_id = _insert_goal(connection)
         connection.commit()
-    upgraded = _alembic(path, "upgrade", "head")
+    upgraded = _alembic(path, "upgrade", "0026_system_observations")
     assert upgraded.returncode == 0, upgraded.stderr
     with sqlite3.connect(path) as connection:
         tables = _tables(connection)

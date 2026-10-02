@@ -33,6 +33,19 @@ def _expected_guard_triggers():
     return names
 
 
+def _expected_work_triggers():
+    """Additional planning guards must remain confined to work/source tables."""
+    names = set()
+    for table, parent in (("projects", "goals"), ("tasks", "projects")):
+        names.update({
+            f"trg_{table}_owner_insert",
+            f"trg_{table}_owner_update",
+            f"trg_{parent}_restrict_{table}_delete",
+            f"trg_{parent}_restrict_{table}_identity_update",
+        })
+    return names
+
+
 def _financial_schema(connection):
     return {
         row[0]: row[1] for row in _execute(connection,
@@ -209,7 +222,7 @@ def test_metadata_create_all_installs_only_goal_guards_and_preserves_financial_s
                 connection, "guard-owner", goal_id,
             )
             assert connection.scalar(text("PRAGMA foreign_keys")) == 0
-            assert _trigger_names(connection) == _expected_guard_triggers()
+            assert _trigger_names(connection) == _expected_guard_triggers() | _expected_work_triggers()
             assert _financial_schema(connection) == financial_schema
             assert _financial_rows(connection) == financial_rows
     finally:

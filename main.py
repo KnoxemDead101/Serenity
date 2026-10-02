@@ -20,6 +20,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from api import (
@@ -36,7 +37,9 @@ from api import (
     instruments,
     portfolios,
     reconciliation,
+    system,
     transactions,
+    work,
 )
 from auth import (
     AUTH_COOKIE,
@@ -118,6 +121,7 @@ def auth_me(request: Request, workspace_id: str = Depends(require_session)):
 
 
 app.include_router(auth_router)
+app.include_router(system.router)
 
 
 @app.exception_handler(WritesPaused)
@@ -160,6 +164,8 @@ for router in (
     portfolios.router,
     reconciliation.router,
     conversions.router,
+    work.projects_router,
+    work.tasks_router,
 ):
     app.include_router(
         router, dependencies=[Depends(require_session), Depends(protect_api_writes)],
@@ -209,6 +215,23 @@ def setup_page(_: str = Depends(require_page_session)):
     return FileResponse(FRONTEND_DIR / "setup.html")
 
 
+@app.get("/projects", include_in_schema=False)
+def projects_page(_: str = Depends(require_page_session)):
+    return FileResponse(FRONTEND_DIR / "projects.html")
+
+
+@app.get("/tasks", include_in_schema=False)
+def tasks_page(_: str = Depends(require_page_session)):
+    return FileResponse(FRONTEND_DIR / "tasks.html")
+
+
+@app.get("/system", include_in_schema=False)
+def system_page(_: str = Depends(require_page_session)):
+    return FileResponse(
+        FRONTEND_DIR / "system.html", headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.get("/sign-in", include_in_schema=False)
 def sign_in_page():
     return FileResponse(FRONTEND_DIR / "sign-in.html")
@@ -239,9 +262,21 @@ if __name__ == "__main__":
 
 @app.middleware("http")
 async def private_conversion_responses(request: Request, call_next):
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except SQLAlchemyError:
+        if request.url.path == "/system" or request.url.path.startswith("/serenity-api/system/"):
+            # If identity/schema lookup fails, authorization cannot be proven.
+            # Do not disclose a health report or the underlying database error.
+            return JSONResponse(
+                {"detail": "System Console is unavailable. Session and data access "
+                 "could not be verified.", "code": "SERENITY_UNAVAILABLE"},
+                status_code=503, headers={"Cache-Control": "no-store"},
+            )
+        raise
     if request.url.path.startswith((
         "/serenity-api/conversions", "/serenity-api/reconciliation",
+        "/serenity-api/system", "/system",
     )):
         # Include authentication, validation and conflict responses, not only
         # successful evidence downloads.

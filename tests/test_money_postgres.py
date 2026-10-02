@@ -25,6 +25,7 @@ from services import account_service, transaction_service
 from services.financial_write_lock import lock_owner_financial_writes
 from services.transaction_service import TransactionRuleError
 from storage.database import get_db
+from tests.migration_helpers import current_head
 
 OWNER = "postgres-money-test"
 SMALL = 12345
@@ -300,7 +301,7 @@ def test_postgres_approved_conversion_migration_is_additive_and_owner_scoped(
     with pg_engine.connect() as connection:
         assert connection.scalar(text(
             "SELECT version_num FROM alembic_version"
-        )) == "0024_restore_publish_keys"
+        )) == current_head()
         for owner, facts in records.items():
             assert connection.scalar(text(
                 "SELECT opening_balance_cents FROM accounts WHERE id = :id"
@@ -369,7 +370,7 @@ def test_postgres_approved_conversion_migration_is_additive_and_owner_scoped(
     with pg_engine.connect() as connection:
         assert connection.scalar(text(
             "SELECT version_num FROM alembic_version"
-        )) == "0024_restore_publish_keys"
+        )) == current_head()
         assert connection.scalar(text(
             "SELECT opening_balance_cents FROM accounts WHERE id = :id"
         ), {"id": a["account"]}) == a["balance"]

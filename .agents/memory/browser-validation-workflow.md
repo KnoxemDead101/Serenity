@@ -14,3 +14,24 @@ starts, even when no validation was requested.
 project Run workflow gained a test task. If so, keep the independent named
 validation and remove only the Run-button invocation through the validated
 Replit config replacement flow.
+
+That replacement accepts an absolute workspace temporary TOML path under the
+`tempFilePath` argument.
+
+**Why:** Direct patches to managed `.replit` are rejected; the replacement
+callback validates the complete configuration before applying it.
+
+**How to apply:** Write a sibling temporary file, then call
+`verifyAndReplaceDotReplit({tempFilePath: absolutePath})`. Keep the named test
+validation independent of the ordinary Run group.
+
+Run the complete publishing gate as a background shell task when using the
+agent's shell tools.
+
+**Why:** The required PostgreSQL/browser suite exceeded the foreground shell's
+five-minute limit even while continuing to pass. A shell timeout is not a test
+failure or a completed validation result.
+
+**How to apply:** Start one background gate, monitor its completion, and retain
+its exit status and final summary. Do not publish or claim a pass from partial
+progress output.

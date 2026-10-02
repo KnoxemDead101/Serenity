@@ -84,6 +84,30 @@ signed-in browser behavior passed. The managed Serenity preview restarted
 successfully; its unauthenticated sign-in page was visually verified.
 Actual published sign-in remains the separate existing verification item.
 
+
+## Owner-reported completed publication and fresh verification (2026-10-02)
+
+After the owner reported publications complete, separately authorized
+production read-only schema inspection confirmed all seven restored ownership
+foreign keys with the expected owner-matched columns, referenced parents,
+`ON DELETE RESTRICT`, and validated status. Deployment metadata confirmed an
+active successful private Autoscale build. The bundled Goals check was also
+present and validated; fresh aggregate-only unsupported-progress counts were
+zero. See `goals-production-review.md` for scope and evidence limitations.
+
+The fresh managed Publish comparison was unavailable. The owner replied
+"Confirmed" to the requested Publishing checklist covering the Goals check,
+reviewed index removals, other changes/warnings, and overwrite-data off.
+This is owner confirmation, not an independently fetched current SQL plan.
+No further publication, production DDL, financial test insert, or correction
+was performed. Fresh counts were collected after publication and do not
+retroactively establish the required pre-publication preflight.
+
+The observed published ownership-restoration and Goals-enforcement gates are
+now verified. Resume the approved Serenity Next baseline/trust development,
+retaining the publication-history qualifications above. Signed-in production
+UI and operational backup readiness remain separate verification work.
+
 ## Second-release preparation (2026-10-02)
 
 A fresh schema-only production replica query confirmed all four prerequisite

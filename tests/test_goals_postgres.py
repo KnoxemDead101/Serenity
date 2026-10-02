@@ -5,6 +5,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from test_money_postgres import _alembic, pg_client, pg_engine, postgres_url  # noqa: F401
+from tests.migration_helpers import current_head
 from utils.choices import GOAL_PROGRESS_SOURCES
 
 
@@ -73,7 +74,7 @@ def test_goals_round_trip_large_bigint_and_have_owner_only_postgres_constraints(
     with pg_engine.connect() as connection:
         assert connection.scalar(text(
             "SELECT version_num FROM alembic_version"
-        )) == "0024_restore_publish_keys"
+        )) == current_head()
         assert connection.scalar(text(
             "SELECT target_amount_cents FROM goals WHERE id = :id"
         ), {"id": goal["id"]}) == 100_000_000_000_000

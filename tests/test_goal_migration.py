@@ -276,9 +276,23 @@ def test_progress_migration_preserves_rows_and_sqlite_relationship_guards(tmp_pa
         assert result.returncode == 0, result.stderr
         with sqlite3.connect(path) as connection:
             assert _goal_snapshot(connection) == before
-            assert connection.execute(
+            current_triggers = connection.execute(
                 "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name"
-            ).fetchall() == triggers
+            ).fetchall()
+            original_names = {row[0] for row in triggers}
+            assert [row for row in current_triggers if row[0] in original_names] == triggers
+            # Additive work guards appear only when the work migration is present.
+            expected_extra = {
+                f"trg_{table}_owner_{suffix}"
+                for table in ("projects", "tasks") for suffix in ("insert", "update")
+            } | {
+                f"trg_{parent}_restrict_{table}_{suffix}"
+                for parent, table in (("goals", "projects"), ("projects", "tasks"))
+                for suffix in ("delete", "identity_update")
+            }
+            assert {row[0] for row in current_triggers} - original_names == (
+                expected_extra if command == ("upgrade", "head") else set()
+            )
             assert connection.execute("PRAGMA index_list(goals)").fetchall() == indexes
             with pytest.raises(sqlite3.IntegrityError, match="Explicitly remove Goal composition"):
                 connection.execute("DELETE FROM goals WHERE id = ?", (goal_id,))

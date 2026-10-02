@@ -64,6 +64,15 @@ function resetGoal() {
   goalCancel.hidden = true;
 }
 
+// Source navigation: Goal -> Projects filtered to this goal (work tracking, not Goal Items).
+function makeProjectsLink(id) {
+  const link = document.createElement("a");
+  link.href = `/projects?goal_id=${id}`;
+  link.className = "button secondary goal-projects-link";
+  link.textContent = "Projects";
+  return link;
+}
+
 function moneyText(value) {
   return value == null ? "—" : formatMoney(value);
 }
@@ -128,6 +137,7 @@ function render() {
         makeRowButton("Edit", "edit", g.id),
         makeRowButton(g.active ? "Archive" : "Reactivate", g.active ? "deactivate" : "reactivate", g.id, "secondary"),
         makeRowButton("Delete", "delete", g.id, "secondary"),
+        makeProjectsLink(g.id),
       ),
     );
     goalBody.append(row);
@@ -297,3 +307,6 @@ reload().catch((error) => {
   goalBody.replaceChildren();
   message(goalMessage, `Could not load goals: ${error.message}`, true);
 });
+// Deep link /goals?goal_id=N opens that goal's details (archived goals included).
+const deepGoalId = Number(new URLSearchParams(window.location.search).get("goal_id"));
+if (Number.isInteger(deepGoalId) && deepGoalId > 0) GC.open(deepGoalId);

@@ -1,5 +1,60 @@
 # Published Goals: read-only progress review
 
+## Fresh rollout verification after owner-reported publication (2026-10-02)
+
+The owner reported all publications approved and requested continuation of
+Serenity Next. The owner then separately authorized a fresh aggregate-only
+production Goals check and post-publication schema-only inspection.
+Deployment metadata confirmed an active, successful private Autoscale build.
+
+The fixed metadata check returned READY for `public.goals` and all required
+columns. Only after that confirmation, the exact aggregate query below ran
+against `environment: "production"`, `target: "replit_database"`. Results were
+zero affected total, active, archived, and non-null zero-amount rows. All dates
+were included; no Goal identities, details, amounts, or financial totals were
+retrieved. These are affected counts, not total Goal counts.
+
+Schema-only catalog inspection confirmed `ck_goals_manual_progress_only` on
+`public.goals`, type CHECK, validated, with definition:
+
+```sql
+CHECK ((((progress_source)::text = 'MANUAL'::text)
+        OR (current_progress_amount_cents IS NULL)))
+```
+
+The same separately authorized inspection confirmed all seven restored
+ownership foreign keys documented in `PUBLISH_ORDERING_REPAIR_PLAN.md`,
+including owner-matched columns, referenced parents, `ON DELETE RESTRICT`,
+and validated status.
+
+This establishes observed production-replica enforcement, not signed-in UI,
+live runtime connection, backup readiness, or a fresh pre-publication preflight.
+Publication preceded this check; post-publication evidence cannot retroactively
+establish the required fresh preflight or the exact comparison approved during
+publication.
+
+The fresh managed Publish comparison operation was unavailable in this agent
+session. The retained fixture is historical review/test evidence, not a fresh
+comparison. The owner was asked for a credential-free Publishing summary
+covering the Goals check, reviewed index removals, other changes/warnings,
+and overwrite-data being off, and replied **"Confirmed"**. This is owner
+confirmation of the requested checklist, not an independently retrieved SQL
+plan or a detailed UI capture. No additional publication was initiated.
+
+The observed enforcement verification is complete after the owner's reported
+publication. The rollout sequence differs from the planned pre-publication
+review: fresh aggregate evidence was collected afterward and cannot prove the
+pre-publication data state. Preserve this qualification in release handoffs.
+
+No records, production schema, deployment commands, or storage settings were
+changed. No production Alembic, DDL, schema hook, or financial test insert ran.
+
+The fresh full validation command `bash scripts/prepublish_check.sh` completed
+successfully: **974 passed, 2 skipped, 2 dependency deprecation warnings**.
+It exercised disposable PostgreSQL and browser checks without migrating an
+existing database. A foreground attempt reached the shell time limit; the
+complete background run exited zero. Neither run inspected production data.
+
 ## Opt-in schema check after each future publication
 
 Ask the agent: **“Check the published Goals schema using production read-only

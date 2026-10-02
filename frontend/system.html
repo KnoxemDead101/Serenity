@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0a0a">
+  <title>Serenity · System</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/system.css">
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">Serenity</span>
+    <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="site-nav">Menu</button>
+    <nav id="site-nav" class="site-nav" aria-label="Main">
+      <a href="/">Dashboard</a>
+      <a href="/accounts">Accounts</a>
+      <a href="/finances">Finances</a>
+      <a href="/income">Income</a>
+      <a href="/profit-engine">Profit Engine</a>
+      <a href="/portfolios">Portfolios</a>
+      <a href="/goals">Goals</a>
+      <a href="/projects">Projects</a>
+      <a href="/tasks">Tasks</a>
+      <a href="/setup">Setup</a>
+      <a href="/system" class="active" aria-current="page">System</a>
+      <a href="/sign-out" class="sign-out">Sign out</a>
+    </nav>
+  </header>
+  <main class="system-page">
+    <h1>System</h1>
+    <p class="muted">What Serenity could observe about itself at the moment of the last check. A healthy reading is a limited runtime observation, not a certification of your records. If something could not be checked, it is shown as unknown, never as fine.</p>
+
+    <section id="system-status" class="panel sys-status" data-state="loading" aria-labelledby="sys-state-title" aria-live="polite">
+      <div class="sys-status-head">
+        <span class="sys-dot" aria-hidden="true"></span>
+        <div>
+          <h2 id="sys-state-title">Checking…</h2>
+          <p id="system-message" class="muted">Asking the server for its current state.</p>
+        </div>
+      </div>
+      <dl class="sys-meta" id="system-meta" hidden>
+        <div><dt>Saving</dt><dd id="system-writes"></dd></div>
+        <div><dt>Checked at</dt><dd><time id="system-checked"></time></dd></div>
+        <div><dt>Version</dt><dd id="system-version"></dd></div>
+      </dl>
+      <div class="form-buttons">
+        <button type="button" id="system-refresh">Refresh</button>
+        <span id="system-refresh-note" class="muted" role="status"></span>
+      </div>
+    </section>
+
+    <section class="panel" id="system-checks-panel" aria-labelledby="sys-checks-title" hidden>
+      <h2 id="sys-checks-title">Checks</h2>
+      <ul id="system-checks" class="sys-checks"></ul>
+    </section>
+
+    <section class="panel" id="system-migration-panel" aria-labelledby="sys-mig-title" hidden>
+      <h2 id="sys-mig-title">Schema revision</h2>
+      <p><span id="system-migration-status" class="sys-pill"></span> <span id="system-migration-message"></span></p>
+      <dl class="sys-meta">
+        <div><dt>Expected</dt><dd id="system-migration-expected"></dd></div>
+        <div><dt>Observed</dt><dd id="system-migration-observed"></dd></div>
+      </dl>
+    </section>
+
+    <section class="panel" id="system-history-panel" aria-labelledby="sys-hist-title" hidden>
+      <h2 id="sys-hist-title">Status history</h2>
+      <p id="system-history-note" role="status"></p>
+      <ol id="system-history" class="sys-checks sys-history"></ol>
+      <ul class="muted dh-notes">
+        <li>The first entry is a baseline. After that, an entry is added only when an operational status changes, including a schema revision change.</li>
+        <li>Times are when Serenity observed a status, not when an outage started or ended.</li>
+        <li>Serenity does not check in the background. Observations happen only when someone opens or refreshes this console.</li>
+        <li>Only your own history is kept: at most 90 days and 200 entries. Older entries are pruned during console requests.</li>
+      </ul>
+    </section>
+
+    <section class="panel" id="data-health-panel" aria-labelledby="dh-title" hidden>
+      <h2 id="dh-title">Data health</h2>
+      <p id="data-health-message"></p>
+      <p class="muted">Checked at <time id="data-health-checked"></time></p>
+      <ul id="data-health-readings" class="sys-checks dh-readings"></ul>
+      <ul class="muted dh-notes">
+        <li>Each domain is reported separately. There is no overall score and no combined healthy rating.</li>
+        <li>Manual timestamps show the last edit, not verified market or pricing freshness.</li>
+        <li>Planned amounts never prove actual transactions.</li>
+        <li>Nothing here changes your records; this view is read-only. A runtime state of Normal does not mean your data is complete.</li>
+      </ul>
+    </section>
+    <section class="panel" id="system-verification-panel" aria-labelledby="ver-title" hidden>
+      <h2 id="ver-title">Owner verification review</h2>
+      <p id="verification-message" role="status"></p>
+      <p class="muted">Checked at <time id="verification-checked"></time></p>
+      <ul id="verification-targets" class="sys-checks ver-targets"></ul>
+      <h3 id="verification-retained-title" hidden>Retained evidence for sources no longer current</h3>
+      <ul id="verification-retained" class="sys-checks ver-retained" hidden></ul>
+      <ul class="muted dh-notes">
+        <li>This is your own recorded evidence that you checked a displayed snapshot. It is not external certification.</li>
+        <li>The latest evidence per item is kept until you replace or delete it.</li>
+        <li>There is no automatic expiry. Deleting live evidence does not erase copies in backups or database recovery history.</li>
+        <li>Evidence for sources that are unavailable, inactive, deleted or replaced stays listed here and can be removed. It does not verify any current fact.</li>
+        <li>Review is due at 30 or more UTC days old, as decided by the server.</li>
+        <li>No statements are uploaded and nothing is checked live. Saving evidence does not change balances or write permissions.</li>
+      </ul>
+    </section>
+  </main>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/verification.js"></script>
+  <script src="/static/js/system.js"></script>
+</body>
+</html>

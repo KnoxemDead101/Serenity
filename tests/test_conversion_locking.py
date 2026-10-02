@@ -1,14 +1,13 @@
 """Synthetic cross-session tests for the shared financial write lock."""
 
-import os
 import threading
 import uuid
 
-import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from services.financial_write_lock import lock_owner_financial_writes
+from test_money_postgres import pg_engine, postgres_url  # noqa: F401
 
 
 def _assert_same_owner_writers_serialize(engine, owner_id):
@@ -63,15 +62,12 @@ def test_sqlite_owner_financial_writes_serialize_on_synthetic_database(tmp_path)
         engine.dispose()
 
 
-@pytest.mark.skipif(
-    not os.getenv("TEST_POSTGRESQL_URL"),
-    reason="Set TEST_POSTGRESQL_URL to an isolated synthetic PostgreSQL database",
-)
-def test_postgresql_owner_financial_writes_serialize_on_synthetic_database():
+def test_postgresql_owner_financial_writes_serialize_on_synthetic_database(
+    postgres_url, pg_engine,
+):
     # Do not fall back to DATABASE_URL: this test must never run against the
     # application's configured database unless an isolated test URL is given.
-    engine = create_engine(os.environ["TEST_POSTGRESQL_URL"], pool_size=2)
-    try:
-        _assert_same_owner_writers_serialize(engine, f"synthetic-{uuid.uuid4()}")
-    finally:
-        engine.dispose()
+    # Only the fixture-created private cluster supplies that isolated URL.
+    assert postgres_url.startswith("postgresql://moneytest@/postgres?host=/tmp/")
+    assert "/isolated-money-pg" in postgres_url and "/socket" in postgres_url
+    _assert_same_owner_writers_serialize(pg_engine, f"synthetic-{uuid.uuid4()}")

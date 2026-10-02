@@ -224,6 +224,12 @@ const GC = (() => {
     bar.className = "form-buttons";
     const closeBtn = makeRowButton("Close composition", "close", g.id, "secondary");
     bar.append(closeBtn);
+    // Source navigation: Goal -> Projects filtered to this goal.
+    const projectsLink = document.createElement("a");
+    projectsLink.className = "button secondary goal-details-projects-link";
+    projectsLink.href = `/projects?goal_id=${g.id}`;
+    projectsLink.textContent = "View projects";
+    bar.append(projectsLink);
     top.append(bar);
     if (readonly) {
       const p = document.createElement("p");

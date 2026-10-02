@@ -7,6 +7,9 @@ from models import investment as investment  # noqa: F401
 from models import portfolio as portfolio  # noqa: F401
 from models.goal import Goal
 from models.goal_composition import GoalCheckpoint, GoalItem, GoalMilestone
+from models.work import Project, Task
+from models.system_observation import SystemObservation
+from models.verification import Verification
 from models.conversion import (
     CashReconciliationEntry,
     ConversionEvent,
@@ -23,6 +26,8 @@ __all__ = [
     "GoalItem",
     "GoalMilestone",
     "OpeningPosition",
+    "Project",
+    "Task",
     "ReconciliationApproval",
     "ValuationEligibility",
 ]

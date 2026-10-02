@@ -1,0 +1,137 @@
+SERENITY NEXT — CHAT HANDOFF
+Updated 2026-10-02
+
+OWNER REQUEST
+Provide a current chat handoff and begin Serenity Next implementation.
+The complete development arc is approved in docs/SERENITY_NEXT.md. Continue
+ordinary implementation slices without asking for repeated scope approval.
+This is the existing Serenity product, not a request for another app.
+
+EXECUTION AND SAFETY CONTRACT
+Use Build mode and the existing Python-only FastAPI/SQLAlchemy/Alembic stack
+with plain HTML/CSS/JavaScript. Keep existing explanatory comments; change
+only what each slice requires. No new frameworks/dependencies without approval.
+Keep financial calculations in Python and money in integer cents.
+Preserve verified ownership and canonical financial meanings.
+
+Only the owner performs managed Publish. Never run production Alembic, direct
+production DDL, deployment/startup schema mutation, overwrite-data, record
+corrections, or live-money broker execution. New paid providers, destructive
+changes, ambiguous ownership/security, and unresolved financial/trading
+semantics require explicit review. Production record inspection needs its own
+permission; this handoff does not grant it.
+
+CURRENT PUBLISHING EVIDENCE
+The latest inspected Publish completed successfully on 2026-10-02 at 18:09 UTC.
+Deployment metadata reports an active successful private publication.
+An earlier attempt failed during the managed database-migration stage despite
+successful package installation and image build. Its logged plan attempted to
+create existing tables; the terminal SQL error was unavailable. A later
+Publish succeeded. Do not present the suspected stale plan as a proven cause.
+
+The ownership repair was independently checked through read-only production
+schema metadata: all seven restored ownership foreign keys and the manual-only
+Goals progress constraint were present and validated. This is not verification
+of authenticated production UI, actual financial data, or backups.
+
+At the beginning of this baseline work, a fresh supported Publish comparison
+reported 13 pending statements, no structural-data-loss flag, no table/column
+removals, and no warnings. It proposed creation of projects, tasks,
+system_observations, and manual_verifications. This is a point-in-time
+comparison, not publication approval or proof that these features are deployed.
+Refresh and review the actual comparison before a later owner-operated Publish.
+
+IMPLEMENTED IN THE CURRENT DEVELOPMENT SOURCE
+- System Console: authenticated operational evidence and existing write-safety
+  visibility. Status display is not a new global financial-write controller.
+- Projects and actionable Tasks: owner-isolated work records and safe source
+  relationships, separate from Goal Items and financial balances.
+- Data Health: deterministic owner-scoped explanations, source links, and input
+  evidence; no opaque score or assertion of real-world completeness.
+- System status history: privacy-safe owner-scoped observations and transitions.
+  Observation timestamps are not independently measured outage start/end times.
+  Request-driven retention does not promise scheduled cleanup or backup erasure.
+- Manual verification: latest owner assertion bound to the reviewed financial
+  snapshot, with review controls. Edits, conversions, and saved explanations are
+  not verification. This is not bank/broker certification or write authority.
+
+These features have merged into development. Do not equate merged code,
+successful local tests, schema publication, and signed-in runtime verification.
+The current local migration graph extends through 0027_manual_verifications.
+
+SERENITY NEXT IMPLEMENTATION STARTED
+Wave 0 now has an executable engineering baseline:
+  bash scripts/serenity_next_check.sh
+See docs/SERENITY_NEXT_BASELINE.md.
+
+It wraps the existing full publishing gate and requires the disposable
+PostgreSQL backup/restore round trip, which was previously optional.
+The named test validation runs this stricter gate, independently of app Run.
+The PostgreSQL financial-write locking test now uses a fixture-created private
+cluster rather than an operator-supplied test database URL. New regressions
+cover required recovery flags, removal of ambient test targets, and failure
+propagation. No application/runtime schema or financial records were changed
+by this baseline implementation.
+
+VERIFICATION RESULT
+The full current strict baseline passed on 2026-10-02: 1,171 passed, 0 failed,
+0 skipped, with two existing test-client deprecation warnings. It ran for
+851 seconds and included mandatory disposable PostgreSQL restore, financial
+locking, migrations, ownership, and synthetic signed-in browser checks.
+The first background run was interrupted by a workspace restart and is not
+counted as evidence; the subsequent managed test run completed successfully.
+Run-button isolation and the strict named test command were independently
+checked against the actual configuration. The managed app is running and its
+unauthenticated sign-in screen was visually checked. Actual signed-in production
+UI remains unverified. Do not substitute older test results for newer source.
+
+REMAINING TRUST GAPS
+- Actual published sign-in and signed-in financial screens remain unverified.
+- Synthetic recovery does not prove automated off-host backups, host-loss
+  recovery, backup encryption/key availability, or a live recovery procedure.
+- Status history cleanup and outage detection are currently request-driven,
+  not guaranteed unattended jobs.
+- Pending development schema/features need separate owner Publish and
+  post-publication verification.
+- No live trading authority or broker execution has been granted.
+
+NEXT IMPLEMENTATION DIRECTION
+Complete and record the Wave 0 evidence, safely synchronize canonical source,
+then continue focused Wave 1 trust work and the coordinated approved waves.
+Do not duplicate existing proposed sign-in, off-host backup, unattended history
+cleanup/outage detection, Today, or structured review work without checking the
+current project task state. Pending/queued tasks are not implicit assignments.
+Do not weaken gates merely to make a check green.
+
+APPROVED WAVES
+0 Baseline: repository/GitHub, tests, migrations, backup baseline.
+1 Trust: backups, audit, ownership/membership, portability, system health.
+2 Personal OS: financial Goal activity, planning, projects/tasks, timeline,
+  attention, deterministic forecasting, non-mutating scenarios.
+3 Trading foundation: instruments, clocks/sessions, market-data contracts,
+  provenance, versioned strategies and setup lifecycle.
+4 Live intelligence: data/analysis, HUD/Copilot, Position Watch, alerts.
+5 Evidence: journals, shadow outcomes, corrections, analytics and comparisons.
+6 Laboratory: replay, experiments, Shadow Agent, Trading Black Box.
+7 Living Serenity: Today/Pulse/Command Center, readings, relationships,
+  WHY/SOURCE/HISTORY and command foundations.
+8 Integration: security, ownership, recovery, migrations, browsers,
+  performance, degraded modes and self-hosting readiness.
+
+SOURCE AND COLLABORATION
+GitHub source synchronization must use the authenticated integration, check
+visibility, avoid force updates/unknown history overwrites, and verify included
+blob IDs. Exclude all attached_assets from new synchronization; preserve
+existing upstream uploads/history. Never publish raw diagnostics or records.
+
+REFERENCES
+replit.md — collaborator-visible stack, authority and financial rules.
+docs/SERENITY_NEXT.md — approved horizon and execution contract.
+docs/SERENITY_NEXT_BASELINE.md — executable Wave 0 validation.
+docs/PUBLISH_ORDERING_REPAIR_PLAN.md — historical repair sequence and boundaries.
+docs/goals-production-review.md — production inspection and rollout evidence.
+docs/BACKUP_RESTORE.md — disposable recovery boundary.
+.agents/memory/MEMORY.md — durable decisions and non-obvious constraints.
+
+Older handoffs are historical. Prefer this handoff plus current source, actual
+task state, fresh tests, and fresh publishing evidence when resuming work.

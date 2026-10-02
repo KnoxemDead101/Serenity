@@ -20,6 +20,7 @@ from schemas.finance import InvestmentCreate
 from schemas.income_profile import IncomeProfileCreate
 from storage.database import Base
 from utils.validators import MAX_MONEY, validate_money
+from tests.migration_helpers import current_head
 
 money_migration = importlib.import_module("migrations.versions.0013_money_bigint")
 conversion_migration = importlib.import_module(
@@ -218,7 +219,7 @@ def test_sqlite_approved_conversion_migration_is_additive_and_owner_scoped(tmp_p
     with sqlite3.connect(path) as db:
         db.execute("PRAGMA foreign_keys = ON")
         assert db.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
-            "0024_restore_publish_keys"
+            current_head()
         )
         for owner, facts in records.items():
             assert db.execute(
@@ -351,7 +352,7 @@ def test_0017_converts_empty_early_text_0016_and_retains_approval_guards(tmp_pat
     assert upgrade.returncode == 0, upgrade.stderr
     with sqlite3.connect(path) as db:
         assert db.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
-            "0024_restore_publish_keys"
+            current_head()
         )
         assert db.execute(
             "SELECT type FROM pragma_table_info('reconciliation_approvals') "

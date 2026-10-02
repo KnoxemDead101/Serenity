@@ -1,0 +1,117 @@
+SERENITY / SERENITY NEXT — CHAT HANDOFF
+Prepared October 2, 2026
+
+OWNER DIRECTION
+Begin implementing the already-approved Serenity Next development arc.
+The owner reports that all publications are approved and the project is up
+to speed. Do not repeatedly ask for approval of ordinary development slices.
+Publication approval does not authorize production record inspection,
+financial corrections, destructive changes, or live broker execution.
+
+WHAT EXISTS IN THE CURRENT WORKSPACE
+Serenity is a Python/FastAPI application with SQLAlchemy/Alembic and plain
+HTML/CSS/JavaScript. Keep this stack; financial calculations belong in Python.
+Existing features include accounts, income/expense transactions and correction
+history, bills, debts, investments, income profiles, dashboard/net worth,
+Goals and Goal composition, reference instruments and a hypothetical trading
+calculator, portfolios/account containers, and investment reconciliation
+and conversion workflows.
+
+Identity uses Clerk with internal Serenity users/workspaces and ownership
+protections. JSON/CSV exports and disposable database recovery rehearsal
+exist; those do not establish automated off-host backups or live recovery.
+There is no verified live market feed or broker execution implied by this
+baseline.
+
+PUBLICATION STATUS — KEEP EVIDENCE SEPARATE
+The owner reports publications are complete and subsequently separately
+authorized aggregate-only Goals and post-publication schema-only checks.
+Fresh deployment metadata confirms an active successful private Autoscale
+build. The production read-only replica confirms the Goals table and all
+required columns, the named validated Goals check with its expected rule,
+and all seven restored owner-matched foreign keys with expected definitions
+and validated status.
+
+The latest recorded two-stage publishing review says development restored
+seven ownership foreign keys and added ck_goals_manual_progress_only.
+Its recorded second-release comparison contains twelve statements: four
+legacy index removals, seven ownership FK additions, and the Goals check.
+That recorded comparison is not a fresh authoritative Publish comparison.
+The fresh full publishing gate (bash scripts/prepublish_check.sh) passed with
+974 passed, 2 skipped and 2 dependency deprecation warnings. Disposable
+PostgreSQL and browser checks completed; no existing database was migrated.
+
+The Goals check permits a stored progress amount only for MANUAL progress:
+CHECK (progress_source = 'MANUAL' OR current_progress_amount_cents IS NULL).
+Earlier unsupported-combination counts were zero, but they are historical.
+A renewed aggregate-only check was initially declined, then explicitly
+authorized separately from publication. Fresh affected counts are zero total,
+active, archived, and non-null zero-amount rows, across all dates. No individual
+records or financial amounts/totals were retrieved. This post-publication check
+does not retroactively establish a fresh pre-publication preflight.
+Nothing was changed, cleared, relabeled, or published by the agent.
+
+IMMEDIATE RELEASE GATE
+1. Fresh authorized Goals metadata, aggregate-only counts, deployment status,
+   and named constraint/ownership FK inspection are now complete.
+   This is evidence from a read-only replica, not proof of signed-in UI.
+2. The fresh managed Publish comparison operation is unavailable in this agent
+   session. The owner replied "Confirmed" to the requested credential-free
+   Publishing checklist covering the Goals check, reviewed index removals,
+   other changes/warnings, and overwrite-data off. This is owner confirmation,
+   not an independently retrieved SQL plan or detailed UI capture.
+   The historical comparison fixture is not a fresh comparison.
+3. Preserve the distinction between verified current enforcement and missing
+   pre-publication evidence. Do not claim that the post-publication count
+   establishes the required preflight or independently verifies Publish history.
+4. Run the full prepublish gate before any further Publish. Use managed
+   Publish only; never production Alembic, direct production DDL, startup/build
+   schema hooks, overwrite-data, or financial test inserts.
+5. Published Goals enforcement has been verified. The planned rollout order
+   changed because the owner had already published before the fresh checks.
+   A post-publication schema/count check cannot retroactively prove preflight.
+
+SERENITY NEXT APPROVED WAVES
+0: Baseline — repository/GitHub, fresh tests, migrations, backup baseline.
+1: Trust — backups, audit, ownership/membership, portability, system health.
+2: Personal OS — Goal Financial Activity, planning, projects, tasks,
+   timeline, attention, deterministic forecasting and non-mutating scenarios.
+3: Trading foundation — instrument identity, clocks/sessions, market data
+   contracts, provenance, strategies/versions, setup lifecycle.
+4: Live intelligence — live data, analysis, strategy HUD, Copilot,
+   Position Watch and alerts.
+5: Evidence — journal, shadow outcomes, corrections, Data Health,
+   analytics, personal baseline and strategy comparison.
+6: Laboratory — replay, experiments, Shadow Agent and Trading Black Box.
+7: Living Serenity — Today/Pulse/Command Center, readings, relationships,
+   WHY/SOURCE/HISTORY, System Console and deterministic command foundations.
+8: Integration/release candidate — failure, recovery, security, ownership,
+   migration/browser/performance checks and self-hosting readiness.
+
+NEXT DEVELOPMENT ACTION
+Establish a fresh Wave 0 baseline, then implement focused Wave 1 trust slices.
+Continue ordinary approved slices
+without routine reauthorization. Report verified results at wave boundaries.
+Do not skip to live trading, invent financial/security semantics, or treat
+planned capabilities as implemented.
+
+AUTHORITATIVE PROJECT REFERENCES
+replit.md — stack, financial rules, development and publishing constraints.
+docs/SERENITY_NEXT.md — approved complete horizon and development waves.
+docs/PUBLISH_ORDERING_REPAIR_PLAN.md — release ordering and verification gate.
+docs/goals-production-review.md — Goals access scope and rollout procedure.
+docs/CHAT_HANDOFF.md — older detailed context; some status is historical.
+docs/BACKUP_RESTORE.md — recovery boundary and existing rehearsal evidence.
+
+REQUEST FOR THE NEXT CHAT
+Use this handoff to distinguish implemented, historically tested,
+owner-reported published, independently verified, and still-planned work.
+Help track Serenity Next against its approved waves without weakening
+financial/ownership safeguards or repeatedly rescoping approved development.
+
+IMPLEMENTATION BOUNDARY
+This verification work closes the observed published Goals/ownership gate.
+It does not implement new Serenity Next application screens or domain models.
+The next concrete development slices are safe System Health visibility,
+followed by Projects/Tasks after trust prerequisites. Their implementation
+has not yet begun in this verification task.

@@ -42,3 +42,15 @@ but different index and FK ordering.
 
 **How to apply:** Refresh the captured plan and replay its actual current order;
 set equality with an earlier passing plan is not exact-order validation.
+
+The plan logged by a failed publication can disagree with a fresh comparison
+and the current production catalog.
+
+**Why:** A failed publication logged creation of tables already present in the
+read-only production catalog, while a fresh supported comparison reported no
+schema differences. The available build logs omitted the terminal SQL error.
+
+**How to apply:** Compare the failed build's actual plan, fresh schema comparison,
+and read-only catalog before changing models or constraints. Request the exact
+credential-free Publishing error if logs omit it. Do not infer missing storage,
+delete existing tables, or bypass managed Publish to resolve this disagreement.

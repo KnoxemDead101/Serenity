@@ -27,6 +27,8 @@ from models.conversion import (
     ValuationEligibility,
 )
 from models.goal import Goal
+from models.work import Project, Task
+from services.work_service import read_work
 from models.goal_composition import GoalCheckpoint, GoalItem, GoalMilestone
 from services.goal_composition_service import to_checkpoint_read, to_item_read, to_milestone_read
 from services.goal_service import to_goal_read
@@ -343,6 +345,15 @@ def build_export(db: Session, owner_id: str) -> dict:
         # Composition arrays are additive fields: existing keys/values retain
         # their meaning; this combined format is version 7.
         "goals": _export_goals(db, owner_id),
+        # Additive work state includes archives, without changing finance exports.
+        "projects": [
+            record.model_dump(mode="json", exclude={"goal_name"})
+            for record in read_work(db, Project, _all(db, Project, owner_id), owner_id)
+        ],
+        "tasks": [
+            record.model_dump(mode="json", exclude={"project_name"})
+            for record in read_work(db, Task, _all(db, Task, owner_id), owner_id)
+        ],
     }
 
 

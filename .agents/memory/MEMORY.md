@@ -4,6 +4,7 @@
 - [Browser validation workflow](browser-validation-workflow.md) — keep Chromium checks in named validation, not the normal app Run button.
 - [Legacy SQLite and Alembic](legacy-sqlite-alembic.md) — pre-migration SQLite files can block Alembic; inspect and preserve data before initializing a new database.
 - [SQLite UTC timestamps](sqlite-utc-timestamps.md) — SQLite drops timezone metadata on ORM reads; treat its naive persisted timestamps as UTC at API boundaries.
+- [SQLite savepoints](sqlite-savepoints.md) — logical ORM transactions do not guarantee physical SQLite transactions; verify locks survive savepoint release.
 - [Clerk vanilla JS UI](clerk-vanilla-js-ui.md) — plain HTML must load the matching Clerk UI bundle before mounting prebuilt sign-in components.
 - [Clerk backend request filtering](clerk-backend-requests.md) — Python's default User-Agent can receive a non-JSON 403 despite valid credentials.
 - [Financial record ownership](financial-record-ownership.md) — verified provenance preserves workspace isolation; test DB constraints under actual runtime connection settings.
@@ -13,3 +14,6 @@
 - [Reconciliation preview boundary](reconciliation-preview-boundary.md) — disposable signed reports are review evidence, never conversion approval; account completeness needs explicit attestation.
 - [Publish FK prerequisites](publish-fk-prerequisites.md) — check the actual Publish diff for both parent-key presence and ordering; passing Alembic migrations are not enough.
 - [Publish review access](publish-review-access.md) — if the schema comparison is unavailable, request a credential-free UI summary; do not infer an empty diff.
+- [System health authority](system-health-boundary.md) — status visibility is not a new global financial write controller; define subsystem failure semantics before changing enforcement.
+- [System observation history](system-history-boundary.md) — observation times are not outage times; request-driven retention does not promise timed physical or backup erasure.
+- [Manual verification evidence](manual-verification-boundary.md) — owner-approved latest-check retention and snapshot-bound assertions, never edit-derived verification.

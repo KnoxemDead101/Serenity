@@ -10,6 +10,12 @@ deployment, and live broker execution still require human review. Publication
 of the current project is the owner's immediate priority before arc development.
 These permissions do not override the Python-only stack or financial safeguards.
 
+On 2026-10-02 the owner reported all publications approved and requested that
+Serenity Next development begin. Treat this as owner-reported publication
+status, not independently verified deployment/schema evidence. Publication
+approval does not authorize production record inspection or corrections;
+obtain the separate read-only permissions required by the Goals rollout.
+
 # Serenity
 
 Serenity is a Python/FastAPI personal finance and investment intelligence app.

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0a0a">
+  <title>Serenity · Projects</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/work.css">
+</head>
+<body data-kind="projects">
+  <header class="topbar">
+    <span class="brand">Serenity</span>
+    <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="site-nav">Menu</button>
+    <nav id="site-nav" class="site-nav" aria-label="Main">
+      <a href="/">Dashboard</a>
+      <a href="/accounts">Accounts</a>
+      <a href="/finances">Finances</a>
+      <a href="/income">Income</a>
+      <a href="/profit-engine">Profit Engine</a>
+      <a href="/portfolios">Portfolios</a>
+      <a href="/goals">Goals</a>
+      <a href="/projects" class="active" aria-current="page">Projects</a>
+      <a href="/tasks">Tasks</a>
+      <a href="/setup">Setup</a>
+      <a href="/system">System</a>
+      <a href="/sign-out" class="sign-out">Sign out</a>
+    </nav>
+  </header>
+  <main>
+    <h1>Projects</h1>
+    <p class="muted">Projects group the work behind a Goal. A project can stand alone or link to one goal. Work tracking is separate from Goal Items and is not spending or financial progress. Nothing here is linked to, or calculated from, your accounts, investments, or transactions.</p>
+    <p id="work-message" class="message" role="status" hidden></p>
+
+    <section class="panel" aria-labelledby="work-form-title">
+      <h2 id="work-form-title">Add project</h2>
+      <form id="work-form" class="wide-form form-grid">
+        <label>Name <input name="name" required maxlength="100" autocomplete="off"></label>
+        <label>Description <span class="muted">(optional)</span>
+          <textarea name="description" maxlength="1000" rows="2"></textarea>
+        </label>
+        <label>Priority <select name="priority" required></select></label>
+        <label>Status <select name="status" disabled></select>
+          <small class="muted">New records start as Not started. Change status from the table or details.</small>
+        </label>
+        <label>Target date <span class="muted">(optional)</span><input name="date" type="date"></label>
+        <label id="work-parent-label">Goal <span class="muted">(optional)</span>
+          <select name="parent_id"></select>
+          <small class="muted" id="work-parent-hint"></small>
+        </label>
+        <label>Notes <span class="muted">(optional)</span>
+          <textarea name="notes" maxlength="1000" rows="2"></textarea>
+        </label>
+        <div class="form-buttons">
+          <button type="submit" id="work-submit">Add project</button>
+          <button type="button" id="work-cancel" class="secondary" hidden>Cancel edit</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel" id="work-details" aria-labelledby="work-details-title" tabindex="-1" hidden>
+      <h2 id="work-details-title">Details</h2>
+      <div id="work-details-body"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="work-list-title">
+      <h2 id="work-list-title">Your Projects</h2>
+      <div class="work-filters">
+        <label>Filter by goal <select id="work-filter-parent"></select></label>
+        <label class="work-check"><input type="checkbox" id="work-show-archived"> Show archived</label>
+      </div>
+      <div id="work-load-error" class="work-error" role="alert" hidden>
+        <p class="message error" id="work-load-error-text"></p>
+        <button type="button" id="work-retry">Retry</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Projects</caption>
+          <thead><tr><th scope="col">Name</th><th scope="col">Goal</th><th scope="col">Priority</th><th scope="col">Status</th><th scope="col">Target date</th><th scope="col">Actions</th></tr></thead>
+          <tbody id="work-body"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/work.js"></script>
+</body>
+</html>
