@@ -1,5 +1,116 @@
 # Published Goals: read-only progress review
 
+## Opt-in schema check after each future publication
+
+Ask the agent: **“Check the published Goals schema using production read-only
+metadata only.”** This is a separate post-publication operation. It is never
+run by startup, the Run button, the prepublish gate, or the deployment build.
+No deployment configuration or storage selection is changed. The existing
+`.replit` deployment command is intentionally unchanged.
+
+The check verifies `public.goals` and **all columns used by the Goal model**,
+not only the three columns used by the historical aggregate review below.
+It queries PostgreSQL catalogs and `information_schema` only, through Replit's
+`executeSql` with `environment: "production"` and `target: "replit_database"`.
+It never reads Goal rows, counts, identities, amounts, connection strings, or
+credential values. It does not use `DATABASE_URL` or local SQLite. It applies
+only to the project's intended Replit-managed production database; if storage
+selection changes to an external database, stop and reassess the target.
+
+### Agent/operator procedure
+
+1. Confirm that the owner has finished publishing and that deployment metadata
+   reports a successful current build (`getDeploymentInfo`). If unavailable,
+   failed, or still building, report readiness unavailable; do not claim the
+   new publication has been checked.
+2. Obtain the fixed query with
+   `python scripts/check_goals_schema.py --print-query`. Execute it with the
+   production read-only database tool. Do not run the query through a shell
+   database client, a caller-provided URL, or the app engine.
+3. Pass the tool result to the evaluator as shown below. The envelope is
+   created immediately from the actual tool invocation, not a development
+   result relabeled as production or a hand-edited result. It is an operator
+   provenance assertion, not a signed attestation. Do not retain or print raw
+   failed tool output: it might include connection details.
+4. If metadata is missing on a replica, wait 30 seconds and repeat steps 2–3
+   with a fresh result, up to three attempts total. A tool/permission failure
+   is unavailable, not a missing table. After bounded retries, leave readiness
+   blocked and explain that lag or unapplied Publish schema may be responsible.
+   The replica cannot establish which. Ask for a credential-free Publishing
+   schema review; never automatically publish or “repair” the database.
+
+Example for the agent's callback execution environment (not a shell command):
+
+```javascript
+const query = await shellExec({
+  command: "python scripts/check_goals_schema.py --print-query"
+});
+if (query.exitCode !== 0 || query.truncated) throw new Error("Query unavailable");
+const result = await executeSql({
+  environment: "production",
+  target: "replit_database",
+  sqlQuery: query.output.trim(),
+  params: []
+});
+// The evaluator outputs only allowlisted schema names and fixed messages.
+// A failed result is redacted before crossing into a shell process.
+const envelope = {
+  environment: "production",
+  target: "replit_database",
+  checked_at: new Date().toISOString(),
+  result: result.success && result.exitCode === 0
+    ? { success: true, exitCode: 0, output: result.output }
+    : { success: false, exitCode: 1, output: "" }
+};
+const payload = Buffer.from(JSON.stringify(envelope)).toString("base64");
+const report = await shellExec({
+  command: "printf '%s' '" + payload +
+    "' | base64 -d | python scripts/check_goals_schema.py --production-metadata"
+});
+console.log(report.output);
+```
+
+Each retry must call `executeSql` again; do not re-evaluate a saved success.
+The evaluator rejects evidence older than five minutes, future-dated evidence,
+wrong targets, malformed results, and unexpected column names. No input flag
+means usage failure, not a database check. There is no fallback to another
+database when production is unavailable.
+
+### Interpreting the result
+
+| Result / exit code | Meaning |
+| --- | --- |
+| `READY (schema only)` / 0 | The Goals table and every required column are present and visible in the observed production connection. |
+| `MISSING` / 1 | A table or required columns are absent in that connection's catalog. On a replica, allow catch-up and repeat before escalating. |
+| `UNAVAILABLE` / 2 | Fresh production metadata cannot be verified, or objects exist but metadata visibility is insufficient. |
+
+Missing or unavailable storage is **unknown data, never zero/empty Goals**.
+Even READY does not establish whether any Goal records exist. Replica success
+is an observation of schema presence/visibility, not proof of primary state,
+the running app's connection, or its source version. The check intentionally
+does not certify types, constraints (including progress protection), existing
+data validity, authenticated Goals behavior, published sign-in, or backups.
+Those require separate checks and authorization. Never bypass private
+publication or app authentication to perform this check.
+
+Any schema action belongs to the supported Publish review with separate owner
+approval. Do not run production DDL/Alembic, add deploy/startup migration hooks,
+replace storage, select overwrite-data, or change/clear any financial record.
+
+### Implementation verification (2026-10-02)
+
+The opt-in procedure was exercised against the managed production read-only
+replica after deployment metadata confirmed a successful current publication.
+It returned **READY (schema only)** for `public.goals` and all 17 required
+columns. No Goal rows were read. This observation is not a standing readiness
+certificate for later publications.
+
+Disposable PostgreSQL regression checks separately cover a missing table,
+partial columns, visible complete schema with either empty or populated data,
+restricted metadata visibility, and a metadata-visible role with no SELECT
+privilege on Goals. Offline report checks cover freshness, wrong targets,
+malformed evidence, redacted failures, and explicit opt-in.
+
 ## Latest result after owner-reported publication
 
 The owner reported, "Published successfully, continue next steps." The agent

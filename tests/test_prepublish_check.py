@@ -46,6 +46,7 @@ def test_gate_isolates_database_and_requires_both_suites(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "isolated-pytest" in result.stdout
     assert "unexpected-direct-database-command" not in result.stdout
+    assert "Published Goals schema is NOT verified" in result.stdout
 
 
 def test_gate_fails_clearly_without_postgres(tmp_path):

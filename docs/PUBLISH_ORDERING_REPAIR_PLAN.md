@@ -137,3 +137,48 @@ was removed after it conflicted with the managed artifact's port; Run now
 targets the managed Serenity service. That service is running and the real
 unauthenticated sign-in page was visually verified. Signed-in production UI
 was not verified. No production DDL or production record query was performed.
+
+## Renewed owner review and additional readiness scan (2026-10-02)
+
+The owner explicitly approved the four redundant index removals and renewed the
+production count-only Goals preflight permission. After reconfirming the table
+and required columns in the read-only production replica, the exact documented
+all-dates predicate returned **0 total, 0 active, 0 archived, and 0 zero-amount
+affected records**. No identities, record values, or financial totals were
+retrieved, and no records were changed.
+
+The newly merged opt-in Goals storage check was reviewed and executed using
+fresh production metadata: the table and every required column are present and
+visible in the replica. This is schema-only evidence, not signed-in runtime or
+live-primary verification.
+
+The additional dependency, static-code, and privacy scanners completed and
+reported no findings. These scans do not prove the absence of vulnerabilities
+or replace the required ownership, migration, browser, and restore tests.
+
+A fresh Publish comparison contains the same twelve approved statements and no
+warnings, structural-data-loss flag, or table/column removals. Its ordering
+differs from the previous capture, so the second-release fixture was refreshed
+to the actual current sequence for exact-order replay. The comparison still
+flags possible backwards incompatibility, as expected for the reviewed index
+removals and new integrity checks; this is not an overwrite-data release.
+
+An orphaned development server left after workflow reconciliation was stopped.
+The managed service restarted successfully with clean startup logs and the
+unauthenticated sign-in screen was visually verified. Actual signed-in
+production UI remains unverified. No production DDL, deployment configuration
+change, publication, or record correction was performed.
+
+The complete post-merge readiness gate passed: **974 passed, 0 failed,
+2 skipped**, including the fresh exact-order Publish replay and the new Goals
+metadata-check regressions. The two existing optional recovery/conversion-lock
+skips remain; this result is not off-host backup or production sign-in proof.
+
+A fresh schema-only replica check reconfirmed all four exact validated parent
+unique constraints. The seven restoration FKs and manual-progress Goal check
+are still absent. The release is ready for the **owner's second Publish**, not
+yet a completed production repair. Review the twelve approved changes without
+overwrite-data; if any additional destructive changes appear, stop. After the
+owner reports completion, verify all seven exact validated FK definitions and
+the Goal check through read-only production metadata before declaring the
+repair complete and starting the approved Serenity Next waves.

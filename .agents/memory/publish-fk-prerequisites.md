@@ -33,3 +33,12 @@ proposed four removals despite their continued physical presence in development.
 verify replacement true unique constraints in production, and replay the exact
 generated sequence. Treat unexpected index removals as an owner-review boundary,
 not as proof that development lacks the indexes or as an automatic safe change.
+
+Fresh comparisons can reorder the same set of statements without a schema
+change.
+
+**Why:** Consecutive second-release comparisons contained identical statements
+but different index and FK ordering.
+
+**How to apply:** Refresh the captured plan and replay its actual current order;
+set equality with an earlier passing plan is not exact-order validation.

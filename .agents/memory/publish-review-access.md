@@ -15,3 +15,15 @@ establish the live application's connection or the definitive Publish plan.
 and schema-change summary. Keep publication approval separate from read-only
 review authorization; do not request connection strings or bypass production
 read-only access.
+
+Treat a production read-only replica's missing schema as a blocked observation,
+not proof of live-primary absence or empty data. Allow catch-up and obtain
+fresh metadata before escalating; success certifies schema observation only.
+
+**Why:** A missing Goals catalog entry became visible after an owner-reported
+publication, but the evidence could not distinguish Publish applying schema
+from the replica catching up.
+
+**How to apply:** Future post-publication checks must distinguish catalog
+absence from unavailable access, and keep schema observation separate from
+runtime connection, authentication, data review, and backup verification.

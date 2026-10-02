@@ -31,3 +31,4 @@ python -c 'import psycopg; import playwright.sync_api' || {
 echo "Running required disposable PostgreSQL and browser checks..."
 pytest -q
 echo "Isolated prepublish checks passed. No existing database was migrated."
+echo "Published Goals schema is NOT verified by this gate. After publishing, opt in to the separate read-only metadata check in docs/goals-production-review.md."

@@ -31,3 +31,14 @@ even while the duplicate root process was serving.
 remove the duplicate root workflow, and restart the managed service once.
 Changes to root `.replit` also require a complete temporary TOML plus
 `verifyAndReplaceDotReplit`; ordinary patches are rejected.
+
+Reconciliation can leave an orphaned application listener even when only the
+managed workflow appears in the configured workflow list.
+
+**Why:** After a merge, the managed process reported an address-in-use error
+while a leftover development process still served its port.
+
+**How to apply:** Verify actual listener ownership as well as workflow status.
+Stop the managed workflow before identifying any leftover process, confirm its
+development command and working directory before stopping it, and restart only
+the managed service. Do not add another workflow to work around the collision.

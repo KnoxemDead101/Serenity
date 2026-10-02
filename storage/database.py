@@ -37,6 +37,9 @@ def get_database_url() -> str:
 
 
 DATABASE_URL = get_database_url()
+# This runtime engine is not evidence of the managed production schema.
+# The opt-in post-publication check uses Replit read-only metadata separately;
+# see storage/goals_schema_readiness.py. Never add startup schema repair here.
 IS_SQLITE = DATABASE_URL.startswith("sqlite")
 engine = create_engine(
     DATABASE_URL,
