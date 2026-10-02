@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from models.dependent import Dependent
 from schemas.dependent import DependentCreate, DependentRead, DependentUpdate
+from services.financial_write_lock import lock_owner_financial_writes
 from services.ownership import require_owner_id
 
 
@@ -28,6 +29,7 @@ def _check_name_free(
 
 def create_dependent(db: Session, data: DependentCreate, owner_id: str) -> Dependent:
     owner_id = require_owner_id(owner_id)
+    lock_owner_financial_writes(db, owner_id)
     _check_name_free(db, data.display_name, owner_id)
     dependent = Dependent(
         owner_id=owner_id, display_name=data.display_name, notes=data.notes
@@ -60,6 +62,7 @@ def get_dependent(db: Session, dependent_id: int, owner_id: str) -> Dependent | 
 
 
 def update_dependent(db: Session, dependent: Dependent, data: DependentUpdate) -> Dependent:
+    dependent = _reload_dependent_for_write(db, dependent)
     _check_name_free(
         db, data.display_name, dependent.owner_id, ignore_id=dependent.id
     )
@@ -74,10 +77,25 @@ def update_dependent(db: Session, dependent: Dependent, data: DependentUpdate) -
 
 
 def set_dependent_active(db: Session, dependent: Dependent, active: bool) -> Dependent:
+    dependent = _reload_dependent_for_write(db, dependent)
     dependent.active = active
     db.commit()
     db.refresh(dependent)
     return dependent
+
+
+def _reload_dependent_for_write(db: Session, dependent: Dependent) -> Dependent:
+    """Refresh the owner-scoped row after serializing against conversions."""
+    owner_id = require_owner_id(dependent.owner_id)
+    lock_owner_financial_writes(db, owner_id)
+    refreshed = db.scalar(
+        select(Dependent)
+        .where(Dependent.id == dependent.id, Dependent.owner_id == owner_id)
+        .execution_options(populate_existing=True)
+    )
+    if refreshed is None:
+        raise ValueError("Dependent no longer exists for this owner")
+    return refreshed
 
 
 def to_dependent_read(dependent: Dependent) -> DependentRead:

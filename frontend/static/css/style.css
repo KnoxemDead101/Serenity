@@ -234,3 +234,34 @@ th { color: var(--color-text-muted); }
 .reconciliation-members p { margin: 0 0 8px; }
 .reconciliation-members label { margin: 6px 0; }
 #reconciliation h3, #reconciliation h4 { margin-bottom: 8px; }
+.conversion-action {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.conversion-action h4 { margin-top: 0; }
+.conversion-choice, .conversion-ack {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 10px 0;
+}
+.conversion-choice input, .conversion-ack input {
+  flex: 0 0 auto;
+  width: 18px;
+  min-height: 18px;
+  margin-top: 4px;
+}
+.conversion-ack { padding: 12px; border: 1px solid var(--border); border-radius: 6px; }
+.evidence-record {
+  overflow-x: auto;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

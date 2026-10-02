@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from models.account import utc_now
 from models.instrument import Instrument, InstrumentSpecification
 from schemas.instrument import InstrumentCreate, InstrumentRead, InstrumentUpdate, SCALE, spec_units
+from services.financial_write_lock import lock_owner_financial_writes
 from services.ownership import require_owner_id
 
 
@@ -28,7 +29,7 @@ def get_instrument(db: Session, instrument_id: int, owner_id: str, *, lock=False
         Instrument.id == instrument_id, Instrument.owner_id == require_owner_id(owner_id)
     )
     if lock:
-        statement = statement.with_for_update()
+        statement = statement.with_for_update().execution_options(populate_existing=True)
     return db.scalar(statement)
 
 
@@ -85,7 +86,9 @@ def _commit(db: Session) -> None:
 
 
 def create_instrument(db: Session, data: InstrumentCreate, owner_id: str) -> Instrument:
-    instrument = Instrument(owner_id=require_owner_id(owner_id), symbol=data.symbol)
+    owner_id = require_owner_id(owner_id)
+    lock_owner_financial_writes(db, owner_id)
+    instrument = Instrument(owner_id=owner_id, symbol=data.symbol)
     db.add(instrument)
     db.add(_new_specification(instrument, data, 1))
     _commit(db)
@@ -96,12 +99,25 @@ def create_instrument(db: Session, data: InstrumentCreate, owner_id: str) -> Ins
 def update_instrument(
     db: Session, instrument_id: int, data: InstrumentUpdate, owner_id: str
 ) -> Instrument | None:
+    owner_id = require_owner_id(owner_id)
+    lock_owner_financial_writes(db, owner_id)
     instrument = get_instrument(db, instrument_id, owner_id, lock=True)
     if instrument is None:
         return None
     if data.symbol != instrument.symbol:
         raise ValueError("An instrument symbol cannot be changed")
-    latest = instrument.specifications[-1]
+    latest = db.scalar(
+        select(InstrumentSpecification)
+        .where(
+            InstrumentSpecification.instrument_id == instrument.id,
+            InstrumentSpecification.owner_id == owner_id,
+        )
+        .order_by(InstrumentSpecification.version.desc())
+        .limit(1)
+        .execution_options(populate_existing=True)
+    )
+    if latest is None:
+        raise InstrumentConflictError("Instrument has no specification to update")
     if data.asset_type != latest.asset_type:
         raise ValueError("An instrument type cannot be changed")
     db.add(_new_specification(instrument, data, latest.version + 1))
@@ -114,6 +130,11 @@ def update_instrument(
 def set_instrument_active(
     db: Session, instrument: Instrument, active: bool
 ) -> Instrument:
+    owner_id = require_owner_id(instrument.owner_id)
+    lock_owner_financial_writes(db, owner_id)
+    instrument = get_instrument(db, instrument.id, owner_id, lock=True)
+    if instrument is None:
+        raise ValueError("Instrument no longer exists for this owner")
     instrument.active = active
     _commit(db)
     db.refresh(instrument)

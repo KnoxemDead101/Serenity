@@ -6,6 +6,7 @@ No database location is accepted from the caller or inherited from DATABASE_URL.
 """
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -105,7 +106,17 @@ def check_revision(snapshot, head):
 
 def seed(engine):
     """Import the app only after source migration and disposable URL binding."""
+    from datetime import datetime, timezone
     from sqlalchemy.orm import Session
+    from models.conversion import (
+        CashReconciliationEntry, ConversionEvent, OpeningPosition,
+        ReconciliationApproval, ValuationEligibility,
+    )
+    from models.goal import Goal
+    from models.goal_composition import GoalCheckpoint, GoalItem, GoalMilestone
+    from models.instrument import Instrument, InstrumentSpecification
+    from models.investment import Investment
+    from models.portfolio import InvestmentAccount, Portfolio
     from schemas.account import AccountCreate
     from schemas.business import BusinessCreate
     from schemas.dependent import DependentCreate
@@ -161,6 +172,39 @@ def seed(engine):
             )
             if index:
                 incomes.set_income_profile_active(db, profile, False)
+            goal = Goal(
+                owner_id=owner,
+                name=f"Restore rehearsal goal {index}",
+                goal_type="SAVINGS",
+                category="FINANCIAL",
+                target_amount_cents=50000,
+                progress_source="MANUAL",
+                current_progress_amount_cents=12500,
+                notes="Synthetic goal data for restore verification",
+            )
+            db.add(goal)
+            db.flush()
+            db.add_all((
+                GoalItem(
+                    owner_id=owner,
+                    goal_id=goal.id,
+                    name=f"Restore rehearsal item {index}",
+                    expected_cost_cents=25000,
+                    manual_actual_cost_override_cents=5000,
+                ),
+                GoalMilestone(
+                    owner_id=owner,
+                    goal_id=goal.id,
+                    title=f"Restore rehearsal milestone {index}",
+                ),
+                GoalCheckpoint(
+                    owner_id=owner,
+                    goal_id=goal.id,
+                    amount_cents=10000,
+                    label="First checkpoint",
+                ),
+            ))
+            db.flush()
             # Explicit negative owner reads, both directions, for every seeded family.
             if (accounts.get_account(db, account.id, other) is not None
                     or transactions.get_transaction(db, account.id, income.id, other) is not None
@@ -170,7 +214,210 @@ def seed(engine):
                     or dependents.get_dependent(db, dependent.id, other) is not None
                     or incomes.get_income_profile(db, profile.id, other) is not None):
                 raise RehearsalError("Cross-owner read succeeded")
+            # Synthetic audit evidence exercises the migrated schema without
+            # invoking conversion or changing any investment/account values.
+            report = json.dumps(
+                {
+                    "fixture": "disposable-restore-rehearsal",
+                    "owner": owner,
+                    "warnings": [],
+                },
+                sort_keys=True, separators=(",", ":"),
+            ).encode("ascii")
+            digest = hashlib.sha256(report).hexdigest()
+            now = datetime.now(timezone.utc)
+            portfolio = Portfolio(owner_id=owner, name=f"Rehearsal portfolio {index}")
+            db.add(portfolio)
+            db.flush()
+            investment_account = InvestmentAccount(
+                owner_id=owner, portfolio_id=portfolio.id, account_id=account.id,
+                name=f"Rehearsal container {index}",
+            )
+            instrument = Instrument(owner_id=owner, symbol=f"REHEARSAL{index}")
+            db.add_all((investment_account, instrument))
+            db.flush()
+            specification = InstrumentSpecification(
+                owner_id=owner, instrument_id=instrument.id, version=1,
+                symbol=instrument.symbol, name="Synthetic rehearsal holding",
+                asset_type="STOCK", currency="USD", tick_size_units=1,
+                point_value_units=100000000,
+            )
+            source_investment = Investment(
+                owner_id=owner, name=f"Rehearsal source {index}", ticker=instrument.symbol,
+                quantity_units=100000000, cost_basis_cents=10000,
+                current_value_cents=10000,
+            )
+            db.add_all((specification, source_investment))
+            db.flush()
+            approval = ReconciliationApproval(
+                owner_id=owner,
+                canonical_report=report,
+                report_format_version=2,
+                algorithm_version="restore-rehearsal",
+                report_sha256=digest,
+                signed_token_evidence="synthetic restore rehearsal evidence",
+                preview_cutoff=now,
+                source_fingerprint="synthetic-source-fingerprint",
+                approving_actor_id=f"actor-{index}",
+                approved_at=now,
+                approved_source_ids="[]",
+                account_corrections_cents="{}",
+                before_component_totals_cents="{}",
+                after_component_totals_cents="{}",
+                expected_delta_cents="-100",
+                backup_evidence_reference="synthetic://restore-rehearsal",
+                backup_cutoff=now,
+                rollback_deadline=now,
+                state="reversed",
+                execution_idempotency_key=f"restore-rehearsal-{index}",
+                execution_payload_sha256=digest,
+                executed_at=now,
+                reversed_at=now,
+            )
+            db.add(approval)
+            db.flush()
+            opening = OpeningPosition(
+                owner_id=owner,
+                approval_id=approval.id,
+                source_investment_id=source_investment.id,
+                portfolio_id=portfolio.id,
+                investment_account_id=investment_account.id,
+                cash_account_id=account.id,
+                instrument_id=instrument.id,
+                specification_id=specification.id,
+                specification_version=specification.version,
+                quantity_units=100000000,
+                entered_basis_cents=10000,
+                basis_status="known",
+                original_entered_value_cents=10000,
+                captured_at=now,
+                source_snapshot=json.dumps({
+                    "id": source_investment.id,
+                    "owner_id": owner,
+                    "active": True,
+                    "name": source_investment.name,
+                    "ticker": instrument.symbol,
+                    "quantity_units": 100000000,
+                    "cost_basis_cents": 10000,
+                    "current_value_cents": 10000,
+                    "notes": None,
+                }, sort_keys=True, separators=(",", ":")),
+                status="reversed",
+            )
+            db.add(opening)
+            db.flush()
+            db.add(ValuationEligibility(
+                owner_id=owner,
+                source_investment_id=source_investment.id,
+                opening_position_id=opening.id,
+                approval_id=approval.id,
+                representation="legacy",
+                status="reversed",
+                created_at=now,
+                updated_at=now,
+            ))
+            cash_entry = CashReconciliationEntry(
+                owner_id=owner,
+                approval_id=approval.id,
+                account_id=account.id,
+                delta_cents=-100,
+                reason="combined_balance_overlap",
+                evidence="Synthetic restore rehearsal correction",
+                before_balance_cents=10000,
+                after_balance_cents=9900,
+                actor_id=f"actor-{index}",
+                created_at=now,
+            )
+            db.add(cash_entry)
+            db.flush()
+            db.add(CashReconciliationEntry(
+                owner_id=owner,
+                approval_id=approval.id,
+                account_id=account.id,
+                delta_cents=100,
+                reason="conversion_reversal",
+                evidence="Synthetic restore rehearsal reversal",
+                before_balance_cents=9900,
+                after_balance_cents=10000,
+                original_entry_id=cash_entry.id,
+                actor_id=f"actor-{index}",
+                created_at=now,
+            ))
+            db.add(ConversionEvent(
+                owner_id=owner,
+                approval_id=approval.id,
+                event_kind="executed",
+                before_totals="{}",
+                after_totals="{}",
+                source_account_state="{}",
+                cutoff=now,
+                created_at=now,
+                actor_id=f"actor-{index}",
+                report_sha256=digest,
+                backup_evidence_reference="synthetic://restore-rehearsal",
+                linked_ids=json.dumps({
+                    "opening_position_id": opening.id,
+                    "cash_entry_id": cash_entry.id,
+                }, sort_keys=True, separators=(",", ":")),
+            ))
+            db.add(ConversionEvent(
+                owner_id=owner,
+                approval_id=approval.id,
+                event_kind="reversed",
+                before_totals="{}",
+                after_totals="{}",
+                source_account_state="{}",
+                cutoff=now,
+                created_at=now,
+                actor_id=f"actor-{index}",
+                report_sha256=digest,
+                backup_evidence_reference="synthetic://restore-rehearsal",
+                linked_ids=json.dumps({
+                    "opening_position_id": opening.id,
+                    "original_cash_entry_id": cash_entry.id,
+                }, sort_keys=True, separators=(",", ":")),
+                reason="Synthetic restore rehearsal reversal",
+            ))
+            db.commit()
     return True
+
+
+def conversion_audit_reads(engine):
+    """Verify seeded conversion audit evidence is visible only to its owner."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+    from models.conversion import ReconciliationApproval
+    from services import conversion_service
+    from services.conversion_service import ConversionNotFound
+
+    result = {}
+    with Session(engine) as db:
+        for index, owner in enumerate(OWNERS):
+            other = OWNERS[1 - index]
+            approvals = db.scalars(
+                select(ReconciliationApproval).where(ReconciliationApproval.owner_id == owner)
+            ).all()
+            if len(approvals) != 1:
+                raise RehearsalError("Conversion audit owner isolation failed")
+            evidence = conversion_service.get_evidence(db, owner, approvals[0].id)
+            try:
+                conversion_service.get_evidence(db, other, approvals[0].id)
+            except ConversionNotFound:
+                pass
+            else:
+                raise RehearsalError("Cross-owner conversion audit read succeeded")
+            if (evidence["approval"]["id"] != approvals[0].id
+                    or {event["event_kind"] for event in evidence["events"]}
+                    != {"executed", "reversed"}
+                    or len(evidence["opening_positions"]) != 1
+                    or len(evidence["eligibility"]) != 1
+                    or len(evidence["cash_entries"]) != 2):
+                raise RehearsalError("Conversion audit evidence is incomplete")
+            result[owner] = {
+                "approvals": [approval.id for approval in approvals],
+                "events": [event["event_id"] for event in evidence["events"]],
+            }
+    return result
 
 
 def service_reads(engine):
@@ -345,6 +592,7 @@ def verify(source_url, restored_url, backend, restore):
         head = head_revision()
         check_revision(expected, head)
         reads = service_reads(source)
+        audit_reads = conversion_audit_reads(source)
         source.dispose()
         restore()
         restored = create_engine(restored_url)
@@ -353,6 +601,8 @@ def verify(source_url, restored_url, backend, restore):
         assert_same(expected, actual)
         if service_reads(restored) != reads:
             raise RehearsalError("Restored owner-scoped service reads differ")
+        if conversion_audit_reads(restored) != audit_reads:
+            raise RehearsalError("Restored conversion audit owner reads differ")
         if backend == "postgresql":
             check_restored_sequence(restored)
         return {
@@ -363,6 +613,7 @@ def verify(source_url, restored_url, backend, restore):
                                for owner, data in reads.items()},
             "checks": ["alembic_head", "all_table_rows", "owner_isolation",
                        "balances", "income_projections", "correction_history",
+                       "conversion_audit_history",
                        "generated_id_sequence" if backend == "postgresql"
                        else "sqlite_integrity_and_foreign_keys"],
         }

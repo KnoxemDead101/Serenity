@@ -8,6 +8,9 @@ import models.bill  # noqa: F401
 import models.business  # noqa: F401
 import models.debt  # noqa: F401
 import models.dependent  # noqa: F401
+import models.goal  # noqa: F401
+import models.goal_composition  # noqa: F401
+import models.conversion  # noqa: F401
 import models.investment  # noqa: F401
 import models.instrument  # noqa: F401
 import models.portfolio  # noqa: F401

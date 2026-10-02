@@ -157,6 +157,46 @@ function ensureSessionActive() {
   );
 }
 
+let financialWritesPaused = false;
+
+function ensureFinancialWritesAvailable() {
+  if (financialWritesPaused) {
+    throw new Error("Serenity is temporarily read-only while publishing protections are restored. Your records are preserved.");
+  }
+}
+
+async function refreshWriteSafety() {
+  if (sessionRecoveryActive) return;
+  let message = "";
+  try {
+    const response = await fetch("/serenity-api/system/write-safety", { cache: "no-store" });
+    if (!response.ok) throw new Error("Safety check unavailable");
+    const status = await response.json();
+    financialWritesPaused = status.writes_enabled !== true;
+    message = financialWritesPaused ? status.message : "";
+  } catch {
+    financialWritesPaused = true;
+    message = "Write safety could not be verified. Saving is paused; retry after the connection recovers.";
+  }
+  let banner = document.getElementById("write-safety-banner");
+  if (!banner && message) {
+    banner = document.createElement("aside");
+    banner.id = "write-safety-banner";
+    banner.setAttribute("role", "status");
+    banner.style.cssText = "padding:12px;margin-bottom:16px;border:1px solid #d8a844;border-radius:6px;";
+    (document.querySelector("main") || document.body).prepend(banner);
+  }
+  if (banner) {
+    banner.textContent = message || "";
+    banner.hidden = !message;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  refreshWriteSafety();
+  window.setInterval(refreshWriteSafety, 30000);
+});
+
 // Send a GET request and return the parsed JSON.
 async function apiGet(url) {
   ensureSessionActive();
@@ -167,6 +207,7 @@ async function apiGet(url) {
 // Send a POST request with a JSON body and return the parsed JSON.
 async function apiPost(url, body = {}) {
   ensureSessionActive();
+  ensureFinancialWritesAvailable();
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -177,6 +218,7 @@ async function apiPost(url, body = {}) {
 
 async function apiPut(url, body) {
   ensureSessionActive();
+  ensureFinancialWritesAvailable();
   const response = await fetch(url, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -187,6 +229,7 @@ async function apiPut(url, body) {
 
 async function apiDelete(url) {
   ensureSessionActive();
+  ensureFinancialWritesAvailable();
   const response = await fetch(url, { method: "DELETE" });
   return handleResponse(response);
 }

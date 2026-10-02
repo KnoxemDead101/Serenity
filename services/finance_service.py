@@ -11,12 +11,13 @@ same number can never be calculated two different ways.
 from collections.abc import Iterable
 
 from sqlalchemy import inspect, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from models.bill import Bill
 from models.account import Account
 from models.debt import Debt
 from models.investment import Investment
+from models.conversion import ValuationEligibility
 from models.portfolio import InvestmentAccount, Portfolio
 from schemas.finance import (
     BillCreate,
@@ -31,6 +32,8 @@ from schemas.finance import (
     InvestmentUpdate,
 )
 from services.ownership import require_owner_id
+from services.financial_write_lock import lock_owner_financial_writes
+from services import portfolio_service
 from utils.choices import BILL_FREQUENCIES, DEBT_TYPES
 from utils.money import (
     cents_to_dollars,
@@ -57,8 +60,10 @@ def is_active(record: Bill | Debt | Investment) -> bool:
 # ---------------------------------------------------------------------------
 
 def create_bill(db: Session, data: BillCreate, owner_id: str) -> Bill:
+    owner_id = require_owner_id(owner_id)
+    lock_owner_financial_writes(db, owner_id)
     bill = Bill(
-        owner_id=require_owner_id(owner_id),
+        owner_id=owner_id,
         name=data.name,
         amount_cents=dollars_to_cents(data.amount),
         due_date=data.due_date,
@@ -85,6 +90,7 @@ def get_bill(db: Session, bill_id: int, owner_id: str) -> Bill | None:
 
 
 def update_bill(db: Session, bill: Bill, data: BillUpdate) -> Bill:
+    bill = _reload_bill_for_write(db, bill)
     bill.name = data.name
     bill.amount_cents = dollars_to_cents(data.amount)
     bill.due_date = data.due_date
@@ -98,15 +104,30 @@ def update_bill(db: Session, bill: Bill, data: BillUpdate) -> Bill:
 
 def delete_bill(db: Session, bill: Bill) -> None:
     """Permanently remove an already owner-scoped bill."""
+    bill = _reload_bill_for_write(db, bill)
     db.delete(bill)
     db.commit()
 
 
 def set_bill_active(db: Session, bill: Bill, active: bool) -> Bill:
+    bill = _reload_bill_for_write(db, bill)
     bill.active = active
     db.commit()
     db.refresh(bill)
     return bill
+
+
+def _reload_bill_for_write(db: Session, bill: Bill) -> Bill:
+    owner_id = require_owner_id(bill.owner_id)
+    lock_owner_financial_writes(db, owner_id)
+    refreshed = db.scalar(
+        select(Bill)
+        .where(Bill.id == bill.id, Bill.owner_id == owner_id)
+        .execution_options(populate_existing=True)
+    )
+    if refreshed is None:
+        raise ValueError("Bill no longer exists for this owner")
+    return refreshed
 
 
 def to_bill_read(bill: Bill) -> BillRead:
@@ -129,8 +150,10 @@ def to_bill_read(bill: Bill) -> BillRead:
 # ---------------------------------------------------------------------------
 
 def create_debt(db: Session, data: DebtCreate, owner_id: str) -> Debt:
+    owner_id = require_owner_id(owner_id)
+    lock_owner_financial_writes(db, owner_id)
     debt = Debt(
-        owner_id=require_owner_id(owner_id),
+        owner_id=owner_id,
         name=data.name,
         debt_type=data.debt_type,
         balance_cents=dollars_to_cents(data.balance),
@@ -158,6 +181,7 @@ def get_debt(db: Session, debt_id: int, owner_id: str) -> Debt | None:
 
 
 def update_debt(db: Session, debt: Debt, data: DebtUpdate) -> Debt:
+    debt = _reload_debt_for_write(db, debt)
     debt.name = data.name
     debt.debt_type = data.debt_type
     debt.balance_cents = dollars_to_cents(data.balance)
@@ -172,15 +196,30 @@ def update_debt(db: Session, debt: Debt, data: DebtUpdate) -> Debt:
 
 def delete_debt(db: Session, debt: Debt) -> None:
     """Permanently remove an already owner-scoped debt."""
+    debt = _reload_debt_for_write(db, debt)
     db.delete(debt)
     db.commit()
 
 
 def set_debt_active(db: Session, debt: Debt, active: bool) -> Debt:
+    debt = _reload_debt_for_write(db, debt)
     debt.active = active
     db.commit()
     db.refresh(debt)
     return debt
+
+
+def _reload_debt_for_write(db: Session, debt: Debt) -> Debt:
+    owner_id = require_owner_id(debt.owner_id)
+    lock_owner_financial_writes(db, owner_id)
+    refreshed = db.scalar(
+        select(Debt)
+        .where(Debt.id == debt.id, Debt.owner_id == owner_id)
+        .execution_options(populate_existing=True)
+    )
+    if refreshed is None:
+        raise ValueError("Debt no longer exists for this owner")
+    return refreshed
 
 
 def to_debt_read(debt: Debt) -> DebtRead:
@@ -203,8 +242,24 @@ def to_debt_read(debt: Debt) -> DebtRead:
 # Investments (temporary starting-position model)
 # ---------------------------------------------------------------------------
 
+class ConvertedInvestmentReadOnly(ValueError):
+    """A converted source is retained as read-only audit/history."""
+
+
+def assert_investment_writable(db: Session, investment: Investment) -> None:
+    if db.scalar(select(ValuationEligibility.id).where(
+        ValuationEligibility.owner_id == investment.owner_id,
+        ValuationEligibility.source_investment_id == investment.id,
+        ValuationEligibility.representation == "opening",
+        ValuationEligibility.status == "active",
+    )) is not None:
+        raise ConvertedInvestmentReadOnly(
+            "Converted original investments are read-only; use the selected opening representation."
+        )
+
 def create_investment(db: Session, data: InvestmentCreate, owner_id: str) -> Investment:
     owner_id = require_owner_id(owner_id)
+    lock_owner_financial_writes(db, owner_id)
     if data.portfolio_id is not None and data.investment_account_id is not None:
         raise ValueError("Choose a portfolio directly or an existing account link, not both")
     if data.portfolio_id is not None:
@@ -252,7 +307,7 @@ def require_active_investment_container(db: Session, owner_id: str, container_id
         InvestmentAccount.active.is_(True),
         Portfolio.active.is_(True),
         Account.active.is_(True),
-    ))
+    ).execution_options(populate_existing=True))
     if container is None:
         raise ValueError("Active investment container not found")
     return container
@@ -274,6 +329,8 @@ def get_investment(db: Session, investment_id: int, owner_id: str) -> Investment
 def update_investment(
     db: Session, investment: Investment, data: InvestmentUpdate
 ) -> Investment:
+    investment = _reload_investment_for_write(db, investment)
+    assert_investment_writable(db, investment)
     if investment.review_pending:
         if investment.portfolio_id is not None:
             if data.investment_account_id is not None:
@@ -281,15 +338,16 @@ def update_investment(
             target = data.portfolio_id if data.portfolio_id is not None else investment.portfolio_id
             require_active_portfolio(db, investment.owner_id, target)
             investment.portfolio_id = target
-        elif data.portfolio_id is not None or (data.investment_account_id is not None and data.investment_account_id != investment.investment_account_id):
+        elif data.portfolio_id is not None or (
+            data.investment_account_id is not None
+            and data.investment_account_id != investment.investment_account_id
+        ):
             raise ValueError("A pending investment's container cannot be changed; cancel and create a new draft")
         else:
             require_active_investment_container(db, investment.owner_id, investment.investment_account_id)
     elif data.investment_account_id is not None:
         raise ValueError("Existing account links must use the reviewed reconciliation flow")
     else:
-        # Organize a legacy investment without changing its counted status.
-        # No account meaning, holding conversion, or valuation is inferred.
         if data.portfolio_id is not None and data.portfolio_id != investment.portfolio_id:
             require_active_portfolio(db, investment.owner_id, data.portfolio_id)
         investment.portfolio_id = data.portfolio_id
@@ -306,18 +364,50 @@ def update_investment(
 
 def delete_investment(db: Session, investment: Investment) -> None:
     """Permanently remove an already owner-scoped investment."""
+    investment = _reload_investment_for_write(db, investment)
+    assert_investment_writable(db, investment)
+    if db.scalar(select(ValuationEligibility.id).where(
+        ValuationEligibility.owner_id == investment.owner_id,
+        ValuationEligibility.source_investment_id == investment.id,
+    )) is not None:
+        raise ConvertedInvestmentReadOnly(
+            "Original records with conversion history must be retained, including after reversal."
+        )
     db.delete(investment)
     db.commit()
 
 
 def set_investment_active(db: Session, investment: Investment, active: bool) -> Investment:
+    investment = _reload_investment_for_write(db, investment)
+    assert_investment_writable(db, investment)
     investment.active = active
     db.commit()
     db.refresh(investment)
     return investment
 
 
+def _reload_investment_for_write(db: Session, investment: Investment) -> Investment:
+    """Refresh an owner-scoped source only after serializing with conversions."""
+    owner_id = require_owner_id(investment.owner_id)
+    lock_owner_financial_writes(db, owner_id)
+    refreshed = db.scalar(
+        select(Investment)
+        .where(Investment.id == investment.id, Investment.owner_id == owner_id)
+        .execution_options(populate_existing=True)
+    )
+    if refreshed is None:
+        raise ValueError("Investment no longer exists for this owner")
+    return refreshed
+
+
 def to_investment_read(investment: Investment) -> InvestmentRead:
+    db = object_session(investment)
+    eligibility = db.scalar(select(ValuationEligibility).where(
+        ValuationEligibility.owner_id == investment.owner_id,
+        ValuationEligibility.source_investment_id == investment.id,
+    )) if db is not None else None
+    selected_opening = bool(eligibility and eligibility.representation == "opening"
+                            and eligibility.status == "active")
     return InvestmentRead(
         id=investment.id,
         portfolio_id=investment.portfolio_id,
@@ -332,6 +422,14 @@ def to_investment_read(investment: Investment) -> InvestmentRead:
         active=investment.active,
         created_at=investment.created_at,
         updated_at=investment.updated_at,
+        read_only=selected_opening,
+        conversion_history=eligibility is not None,
+        conversion_status="executed" if selected_opening else "reversed" if eligibility else None,
+        valuation_representation="opening" if selected_opening else "legacy",
+        # A reversed source is writable again, but its retained historical link
+        # is available separately without implying an active opening.
+        opening_position_id=eligibility.opening_position_id if selected_opening else None,
+        conversion_approval_id=eligibility.approval_id if selected_opening else None,
     )
 
 
@@ -340,12 +438,34 @@ def total_debt_balance_cents(debts: Iterable[Debt]) -> int:
     return sum(debt.balance_cents for debt in debts if is_active(debt))
 
 
-def total_investment_value_cents(investments: Iterable[Investment]) -> int:
-    """Current value of the given investments, in cents (not cost basis)."""
-    return sum(
-        investment.current_value_cents
-        for investment in investments
-        if is_active(investment) and not investment.review_pending
+def total_investment_value_cents(
+    investments: Iterable[Investment],
+    db: Session | None = None,
+    owner_id: str | None = None,
+) -> int:
+    """Selected active valuations, in cents: legacy sources or replacements, never both."""
+    rows = list(investments)
+    if db is None and rows:
+        attached = {object_session(row) for row in rows if not inspect(row).transient}
+        if attached:
+            if len(attached) != 1 or None in attached:
+                raise ValueError("Selected investment totals require a single database context")
+            db = attached.pop()
+            owners = {row.owner_id for row in rows}
+            if len(owners) != 1:
+                raise ValueError("Selected investment totals require one workspace owner")
+            owner_id = owners.pop()
+    if db is None or owner_id is None:
+        # Preserve the pre-conversion behavior for callers without a DB context.
+        return sum(
+            investment.current_value_cents
+            for investment in rows
+            if is_active(investment) and not investment.review_pending
+        )
+    legacy_rows = portfolio_service.eligible_legacy_investments(db, owner_id, rows)
+    _, openings = portfolio_service.selected_valuation_records(db, owner_id)
+    return sum(row.current_value_cents for row in legacy_rows) + sum(
+        opening.original_entered_value_cents for opening in openings
     )
 
 
@@ -376,9 +496,12 @@ def normalized_monthly_bill_total_cents(bills: Iterable[Bill]) -> int:
 # ---------------------------------------------------------------------------
 
 def get_finance_summary(db: Session, owner_id: str) -> FinanceSummary:
+    lock_owner_financial_writes(db, owner_id)
     bills = list_bills(db, owner_id)
     debts = list_debts(db, owner_id)
     investments = list_investments(db, owner_id)
+    legacy_investments = portfolio_service.eligible_legacy_investments(db, owner_id, investments)
+    _, openings = portfolio_service.selected_valuation_records(db, owner_id)
 
     return FinanceSummary(
         bill_count=sum(1 for bill in bills if is_active(bill)),
@@ -387,9 +510,9 @@ def get_finance_summary(db: Session, owner_id: str) -> FinanceSummary:
         ),
         debt_count=sum(1 for debt in debts if is_active(debt)),
         debt_balance=cents_to_dollars(total_debt_balance_cents(debts)),
-        investment_count=sum(1 for investment in investments if is_active(investment) and not investment.review_pending),
+        investment_count=len(legacy_investments) + len(openings),
         investment_value=cents_to_dollars(
-            total_investment_value_cents(investments)
+            total_investment_value_cents(investments, db, owner_id)
         ),
     )
 

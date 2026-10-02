@@ -52,7 +52,7 @@ def test_organization_is_private_and_does_not_change_financial_totals(client, db
     after = get_dashboard_summary(db, "test-owner")
     assert after == before
     export = client.get(ROOT + "/export").json()
-    assert export["format_version"] == 5
+    assert export["format_version"] == 7
     assert export["investments"] == legacy
     assert export["accounts"][0]["opening_balance_cents"] == 12000
     assert [p["id"] for p in export["portfolios"]] == [empty["id"], second["id"]]

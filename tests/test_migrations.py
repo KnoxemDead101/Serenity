@@ -107,8 +107,30 @@ def test_alembic_head_builds_expected_sqlite_schema(tmp_path):
         }
         assert {
             "accounts", "bills", "debts", "investments", "transactions",
-            "transaction_corrections", "alembic_version",
+            "transaction_corrections", "goals", "goal_items",
+            "goal_milestones", "goal_checkpoints", "alembic_version",
         } <= tables
+
+        goal_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(goals)")
+        }
+        assert {
+            "id", "owner_id", "name", "description", "goal_type", "category",
+            "status", "priority", "target_date", "target_amount_cents",
+            "current_progress_amount_cents", "progress_source", "notes",
+            "active", "completed_at", "created_at", "updated_at",
+        } <= goal_columns
+        assert "ix_goals_owner_id" in index_names(connection, "goals")
+        assert not connection.execute("PRAGMA foreign_key_list(goals)").fetchall()
+        goal_indexes = {
+            row[1]: row[2] for row in connection.execute("PRAGMA index_list(goals)")
+        }
+        assert any(
+            unique and set(
+                row[2] for row in connection.execute("PRAGMA index_info(" + name + ")")
+            ) == {"owner_id", "id"}
+            for name, unique in goal_indexes.items()
+        )
 
         debt_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(debts)")

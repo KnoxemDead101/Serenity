@@ -4,7 +4,7 @@ import csv
 import io
 from datetime import datetime, timezone
 
-from sqlalchemy import select, text
+from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -19,10 +19,25 @@ from models.instrument import Instrument, InstrumentSpecification
 from models.portfolio import InvestmentAccount, Portfolio
 from models.transaction import Transaction
 from models.transaction_correction import TransactionCorrection
+from models.conversion import (
+    CashReconciliationEntry,
+    ConversionEvent,
+    OpeningPosition,
+    ReconciliationApproval,
+    ValuationEligibility,
+)
+from models.goal import Goal
+from models.goal_composition import GoalCheckpoint, GoalItem, GoalMilestone
+from services.goal_composition_service import to_checkpoint_read, to_item_read, to_milestone_read
+from services.goal_service import to_goal_read
 from services.ownership import require_owner_id
 from utils.money import cents_to_dollars, milli_to_percent, units_to_quantity
 
-EXPORT_FORMAT_VERSION = 5
+from services import account_service
+from services import portfolio_service
+from services.financial_write_lock import lock_owner_financial_writes
+
+EXPORT_FORMAT_VERSION = 7
 
 
 def _iso(value) -> str | None:
@@ -40,9 +55,11 @@ def _active(record) -> bool:
 
 def get_schema_version(db: Session) -> str | None:
     try:
-        return db.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        with db.begin_nested():
+            if not inspect(db.connection()).has_table("alembic_version"):
+                return None
+            return db.execute(text("SELECT version_num FROM alembic_version")).scalar()
     except SQLAlchemyError:
-        db.rollback()
         return None
 
 
@@ -50,13 +67,68 @@ def _all(db: Session, model, owner_id: str) -> list:
     owner_id = require_owner_id(owner_id)
     return list(db.scalars(select(model).where(
         model.owner_id == owner_id
-    ).order_by(model.id)))
+    ).order_by(model.id).execution_options(populate_existing=True)))
+
+def _ledger_record(record) -> dict:
+    """Serialize a conversion ledger row without losing integer/binary evidence."""
+    result = {}
+    for column in record.__table__.columns:
+        value = getattr(record, column.name)
+        if isinstance(value, bytes):
+            value = value.hex()
+        elif hasattr(value, "isoformat"):
+            value = value.isoformat()
+        result[column.name] = value
+    return result
+
+
+def _export_goals(db: Session, owner_id: str) -> list[dict]:
+    """Batch composition once per family, rather than once per parent Goal."""
+    goals = _all(db, Goal, owner_id)
+    grouped = {}
+    for model in (GoalItem, GoalMilestone, GoalCheckpoint):
+        by_goal = {}
+        rows = db.scalars(select(model).join(
+            Goal, (model.goal_id == Goal.id) & (model.owner_id == Goal.owner_id),
+        ).where(Goal.owner_id == owner_id).order_by(model.sort_order, model.id))
+        for row in rows:
+            by_goal.setdefault(row.goal_id, []).append(row)
+        grouped[model] = by_goal
+    exported = []
+    for goal in goals:
+        data = to_goal_read(goal).model_dump(mode="json")
+        data["items"] = [
+            to_item_read(row).model_dump(mode="json")
+            for row in grouped[GoalItem].get(goal.id, [])
+        ]
+        data["milestones"] = [
+            to_milestone_read(row).model_dump(mode="json")
+            for row in grouped[GoalMilestone].get(goal.id, [])
+        ]
+        # Reached is a display-time comparison, not backup state to restore.
+        data["checkpoints"] = [
+            to_checkpoint_read(row, goal).model_dump(mode="json", exclude={"reached"})
+            for row in grouped[GoalCheckpoint].get(goal.id, [])
+        ]
+        exported.append(data)
+    return exported
 
 
 def build_export(db: Session, owner_id: str) -> dict:
     """Return every row, including inactive and soft-deleted history."""
     owner_id = require_owner_id(owner_id)
+    lock_owner_financial_writes(db, owner_id)
     accounts = _all(db, Account, owner_id)
+    current_account_balances = {
+        account.id: account_service.calculate_current_balance_cents(account, db)
+        for account in accounts
+    }
+    replaced_source_ids, selected_openings = portfolio_service.selected_valuation_records(db, owner_id)
+    selected_opening_ids = {position.id for position in selected_openings}
+    eligibility_by_source = {
+        row.source_investment_id: row
+        for row in _all(db, ValuationEligibility, owner_id)
+    }
     return {
         "format": "serenity-backup",
         "format_version": EXPORT_FORMAT_VERSION,
@@ -68,6 +140,8 @@ def build_export(db: Session, owner_id: str) -> dict:
                 "classification": a.classification,
                 "opening_balance_cents": a.opening_balance_cents,
                 "opening_balance": _money(a.opening_balance_cents),
+                "current_balance_cents": current_account_balances[a.id],
+                "current_balance": _money(current_account_balances[a.id]),
                 "institution": a.institution, "notes": a.notes,
                 "active": _active(a), "created_at": _iso(a.created_at),
                 "updated_at": _iso(a.updated_at),
@@ -155,6 +229,14 @@ def build_export(db: Session, owner_id: str) -> dict:
                 "cost_basis": _money(i.cost_basis_cents),
                 "current_value_cents": i.current_value_cents,
                 "current_value": _money(i.current_value_cents),
+                "selected_for_valuation": (
+                    _active(i) and not i.review_pending
+                    and i.id not in replaced_source_ids
+                ),
+                "valuation_representation": (
+                    eligibility_by_source[i.id].representation
+                    if i.id in eligibility_by_source else "legacy"
+                ),
                 "notes": i.notes, "active": _active(i),
                 "investment_account_id": i.investment_account_id,
                 "portfolio_id": i.portfolio_id,
@@ -162,6 +244,25 @@ def build_export(db: Session, owner_id: str) -> dict:
                 "created_at": _iso(i.created_at), "updated_at": _iso(i.updated_at),
             }
             for i in _all(db, Investment, owner_id)
+        ],
+        "reconciliation_approvals": [
+            _ledger_record(row) for row in _all(db, ReconciliationApproval, owner_id)
+        ],
+        "opening_positions": [
+            {
+                **_ledger_record(row),
+                "selected_for_valuation": row.id in selected_opening_ids,
+            }
+            for row in _all(db, OpeningPosition, owner_id)
+        ],
+        "valuation_eligibility": [
+            _ledger_record(row) for row in _all(db, ValuationEligibility, owner_id)
+        ],
+        "cash_reconciliation_entries": [
+            _ledger_record(row) for row in _all(db, CashReconciliationEntry, owner_id)
+        ],
+        "conversion_events": [
+            _ledger_record(row) for row in _all(db, ConversionEvent, owner_id)
         ],
         "portfolios": [
             {
@@ -237,6 +338,11 @@ def build_export(db: Session, owner_id: str) -> dict:
             }
             for p in _all(db, IncomeProfile, owner_id)
         ],
+        # Append owner-scoped goals, including archived records. Read models
+        # supply raw cents, decimal strings, ISO dates and UTC timestamps.
+        # Composition arrays are additive fields: existing keys/values retain
+        # their meaning; this combined format is version 7.
+        "goals": _export_goals(db, owner_id),
     }
 
 

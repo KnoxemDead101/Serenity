@@ -15,6 +15,17 @@ authorizes investment conversion or a valuation switch. Consult
 docs/PORTFOLIO_PHASE2_SCOPE.md before extending portfolios or activity; do not
 repeat settled design questions.
 
+On October 1, 2026, the owner explicitly approved the conversion slice's
+**implementation only**. Real-record conversion and publication still require
+separate approval. Later development authority is recorded in replit.md.
+
+**Why:** Permission to build and prove conversion on disposable records does
+not establish the facts or backup readiness needed to change real balances.
+
+**How to apply:** Continue implementation and synthetic verification without
+asking again; do not treat that permission as authorization to execute any
+real-data report or publish.
+
 **Why:** The owner's answer about existing account balances was deliberately
 non-specific (mixed, unsure, or no records). It establishes uncertainty, not
 cash-only semantics or an empty dataset. Design approval cannot resolve facts

@@ -18,13 +18,18 @@
       <a href="/income">Income</a>
       <a href="/profit-engine">Profit Engine</a>
       <a href="/portfolios" class="active" aria-current="page">Portfolios</a>
+      <a href="/goals">Goals</a>
       <a href="/setup">Setup</a>
       <a href="/sign-out" class="sign-out">Sign out</a>
     </nav>
   </header>
   <main>
     <h1>Portfolios</h1>
-    <p class="muted">A portfolio holds your investments. Add an investment on the Finances page and choose its portfolio there. New investments stay uncounted until review. A portfolio name does not establish ownership or sharing.</p>
+    <p class="muted">Organize private portfolios and link existing Accounts as metadata only.
+      Linking an Account does not prove its balance is cash-only or reconcile existing investments.
+      Portfolio and container changes do not convert investments, move money, or change balances, net worth, or dashboard totals. Any approved conversion is a separate, explicitly confirmed workflow below.
+      A portfolio holds your investments. New investments stay uncounted until review.
+      A portfolio name (including a child's name) does not establish ownership or sharing.</p>
 
     <section class="panel" aria-labelledby="portfolio-title">
       <h2 id="portfolio-title">Your portfolios</h2>
@@ -95,8 +100,8 @@
     </details>
 
     <section class="panel" id="reconciliation" aria-labelledby="reconciliation-title">
-      <h2 id="reconciliation-title">Investment reconciliation preview</h2>
-      <p class="muted">Review investments and the balances of any Accounts they may be associated with. This is a private, read-only comparison—not a conversion, trade, transfer, price update, approval, or change to your live dashboard. Original entered values are not live quotes. Nothing is saved by previewing, exporting, or cancelling.</p>
+      <h2 id="reconciliation-title">Investment reconciliation and conversion</h2>
+      <p class="muted">Review the private comparison first. A signed preview token is evidence only: it is not approval and cannot execute a conversion. Approval stores the exact report and corrections but does not execute. Execution is a separate explicit owner action. Original entered values are not live quotes; no currency conversion or price feed is used.</p>
       <div class="form-buttons">
         <button type="button" id="reconciliation-start">Review existing investments</button>
         <button type="button" id="reconciliation-cancel" class="secondary" hidden>Cancel and discard preview</button>
@@ -110,7 +115,10 @@
           <h3>2. Review linked Account balances</h3>
           <p class="muted">For each Account, say whether its existing ledger balance is cash only, includes investment values, or is unknown. For cash-only and combined balances, enter the cash portion in cents and attest to the complete set of Investments mapped to that Account. Cash-only balances do not include their values. An incomplete declaration blocks that Account group. No balance is changed.</p>
           <div id="reconciliation-accounts"></div>
-          <div class="form-buttons"><button type="submit" id="reconciliation-preview">Calculate read-only preview</button></div>
+            <div class="form-buttons">
+              <button type="submit" id="reconciliation-preview">Calculate read-only preview</button>
+              <button type="button" id="reconciliation-execution-preview" class="secondary">Create execution-capable preview</button>
+            </div>
         </form>
         <section id="reconciliation-report" aria-labelledby="reconciliation-report-title" hidden>
           <h3 id="reconciliation-report-title">Comparison report</h3>
@@ -133,12 +141,75 @@
           <h4>Explanations and unresolved warnings</h4>
           <ul id="reconciliation-explanations"></ul>
           <ul id="reconciliation-warnings"></ul>
-          <p class="muted">A signed report is a snapshot, not permission to make changes. Verify freshness before using it. Export refuses stale snapshots.</p>
+          <p class="muted">A signed report is a snapshot, not permission to make changes. Verify freshness before using it. Export refuses stale snapshots. Older read-only report formats cannot be approved or executed.</p>
           <div class="form-buttons">
             <button type="button" id="reconciliation-verify" class="secondary">Check report freshness</button>
             <button type="button" id="reconciliation-export" class="secondary">Export signed report JSON</button>
           </div>
           <p id="reconciliation-status" role="status"></p>
+          <section id="conversion-approval" class="conversion-action" aria-labelledby="conversion-approval-title" hidden>
+            <h4 id="conversion-approval-title">Owner approval — stores only, never executes</h4>
+            <p class="muted">Review and explicitly select each exact source record and each account correction below. Canceling makes no change. An approval does not execute a conversion.</p>
+            <p id="conversion-readiness" role="status"></p>
+            <div id="conversion-record-confirmations"></div>
+            <div class="reconciliation-fields">
+              <label>Private backup evidence reference
+                <input id="conversion-backup-reference" maxlength="500" autocomplete="off">
+                <small class="muted">Must refer to an eligible, current off-host backup and restore rehearsal; a local export is not evidence.</small>
+              </label>
+              <label>Backup evidence cutoff
+                <input id="conversion-backup-cutoff" type="datetime-local">
+                <small class="muted">Enter the observed cutoff time covered by the referenced backup evidence.</small>
+              </label>
+              <label>Approved rollback deadline
+                <input id="conversion-rollback-deadline" type="datetime-local">
+                <small class="muted">Execution remains blocked unless the server confirms the backup and freshness gates.</small>
+              </label>
+            </div>
+            <label class="conversion-ack"><input id="conversion-approval-confirm" type="checkbox">
+              I reviewed the exact selected source records, ownership/basis warnings, report digest, and each account correction. I explicitly approve storing this exact immutable report and correction set only.
+            </label>
+            <div class="form-buttons">
+              <button type="button" id="conversion-approve">Store owner approval only</button>
+              <button type="button" id="conversion-cancel-approval" class="secondary">Cancel / no-op</button>
+            </div>
+            <p id="conversion-approval-message" class="message" role="status" hidden></p>
+          </section>
+          <section id="conversion-execution" class="conversion-action" aria-labelledby="conversion-execution-title" hidden>
+            <h4 id="conversion-execution-title">Separate execution confirmation</h4>
+            <p id="conversion-approval-summary" class="muted"></p>
+            <p class="muted">This is a separate financial write. The preview token or approval ID alone grants no permission. The server rechecks owner, backup gate, and freshness before committing the exact approved set.</p>
+            <label class="conversion-ack"><input id="conversion-execution-confirm" type="checkbox">
+              I explicitly confirm execution of this approved conversion now.
+            </label>
+            <label>Type the approval ID to confirm
+              <input id="conversion-execution-id" autocomplete="off">
+            </label>
+            <div class="form-buttons">
+              <button type="button" id="conversion-execute" class="danger">Execute approved conversion</button>
+              <button type="button" id="conversion-execution-cancel" class="secondary">Cancel execution</button>
+            </div>
+            <p id="conversion-execution-message" class="message" role="status" hidden></p>
+          </section>
+          <section id="conversion-evidence" class="conversion-action" aria-labelledby="conversion-evidence-title" hidden>
+            <h4 id="conversion-evidence-title">Owner-private conversion evidence</h4>
+            <p id="conversion-evidence-summary" class="muted"></p>
+            <div id="conversion-evidence-details"></div>
+            <div class="form-buttons">
+              <button type="button" id="conversion-export-evidence" class="secondary">Export private conversion evidence JSON</button>
+            </div>
+            <label>Reason for safe reversal
+              <textarea id="conversion-reversal-reason" maxlength="2000" rows="3"></textarea>
+            </label>
+            <label class="conversion-ack"><input id="conversion-reversal-confirm" type="checkbox">
+              I separately confirm this reversal request. I understand it is allowed only inside the approved window and when the server proves no dependent activity.
+            </label>
+            <div class="form-buttons">
+              <button type="button" id="conversion-reverse" class="danger">Request safe reversal</button>
+              <button type="button" id="conversion-refresh-evidence" class="secondary">Refresh evidence</button>
+            </div>
+            <p id="conversion-evidence-message" class="message" role="status" hidden></p>
+          </section>
         </section>
       </div>
     </section>

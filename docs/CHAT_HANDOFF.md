@@ -1,3 +1,12 @@
+# Current development authority
+
+The owner's complete Serenity Next authorization supersedes older Gate-0 and
+per-slice approval stops in this historical handoff. See `SERENITY_NEXT.md`.
+The guarded two-stage publishing repair is explicitly approved; follow
+`PUBLISH_ORDERING_REPAIR_PLAN.md` for its required release boundaries.
+Production publishing and changes to real financial meaning remain separate
+review conditions.
+
 # Serenity — chat handoff
 
 Updated September 29, 2026. Use this as context for continued product brainstorming.

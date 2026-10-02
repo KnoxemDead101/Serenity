@@ -31,6 +31,14 @@ def preview(data: PreviewRequest, owner_id: str = Depends(require_session), db: 
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
 
+@router.post("/execution-preview")
+def execution_preview(
+    data: PreviewRequest, owner_id: str = Depends(require_session), db: Session = Depends(get_db)
+):
+    result = _call(service.build_execution_preview, db, owner_id, data)
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+
 @router.post("/verify")
 def verify(data: ReportToken, owner_id: str = Depends(require_session), db: Session = Depends(get_db)):
     result = _call(service.verify_report, db, owner_id, data.report_token)

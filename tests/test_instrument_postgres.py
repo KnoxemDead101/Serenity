@@ -92,7 +92,7 @@ def test_postgres_registry_versions_export_and_safe_rollback(
     with Session(pg_engine) as db:
         exported = build_export(db, "postgres-money-test")
         other_owner = build_export(db, "other-workspace")
-        assert exported["format_version"] == 5
+        assert exported["format_version"] == 7
         assert [entry["version"] for entry in exported["instrument_specifications"]] == [1, 2]
         assert [entry["point_value_units"] for entry in exported["instrument_specifications"]] == [
             500_000_000, 625_000_000

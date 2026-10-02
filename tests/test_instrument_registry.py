@@ -59,7 +59,7 @@ def test_registry_versions_export_and_financial_totals_unchanged(client, db):
         f"/serenity-api/instruments/{data['id']}/reactivate"
     ).json()["active"] is True
     exported = export_service.build_export(db, "test-owner")
-    assert exported["format_version"] == 5
+    assert exported["format_version"] == 7
     assert exported["instruments"][0]["symbol"] == "MES"
     assert [s["point_value_units"] for s in exported["instrument_specifications"]] == [
         500_000_000, 525_000_000

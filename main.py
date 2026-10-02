@@ -25,10 +25,13 @@ from sqlalchemy.orm import Session
 from api import (
     accounts,
     businesses,
+    conversions,
     dashboard,
     dependents,
     export,
     finance,
+    goal_composition,
+    goals,
     income_profiles,
     instruments,
     portfolios,
@@ -47,6 +50,7 @@ from auth import (
     verify_clerk_token,
 )
 from services import identity_service
+from services.write_safety import MESSAGE, WritesPaused, require_safe_write, write_state
 from storage.database import get_db
 
 FRONTEND_DIR = Path(__file__).parent / "frontend"
@@ -115,12 +119,39 @@ def auth_me(request: Request, workspace_id: str = Depends(require_session)):
 
 app.include_router(auth_router)
 
+
+@app.exception_handler(WritesPaused)
+async def writes_paused_response(request: Request, error: WritesPaused):
+    return JSONResponse(
+        {"detail": MESSAGE, "code": "SERENITY_READ_ONLY"}, status_code=503,
+        headers={"Cache-Control": "no-store", "Retry-After": "60"},
+    )
+
+
+def protect_api_writes(request: Request, db: Session = Depends(get_db)):
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        require_safe_write(db)
+
+
+@app.get("/serenity-api/system/write-safety")
+def financial_write_safety(
+    _: str = Depends(require_session), db: Session = Depends(get_db),
+):
+    state = write_state(db.connection())
+    return JSONResponse(
+        {"state": state, "writes_enabled": state == "NORMAL",
+         "message": MESSAGE if state != "NORMAL" else None},
+        headers={"Cache-Control": "no-store"},
+    )
+
 # --- API routes (return JSON) ---
 for router in (
     accounts.router,
     transactions.router,
     dashboard.router,
     finance.router,
+    goal_composition.router,
+    goals.router,
     export.router,
     businesses.router,
     dependents.router,
@@ -128,8 +159,11 @@ for router in (
     instruments.router,
     portfolios.router,
     reconciliation.router,
+    conversions.router,
 ):
-    app.include_router(router, dependencies=[Depends(require_session)])
+    app.include_router(
+        router, dependencies=[Depends(require_session), Depends(protect_api_writes)],
+    )
 
 # --- Frontend (returns HTML/CSS/JS files) ---
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR / "static"), name="static")
@@ -165,6 +199,11 @@ def portfolios_page(_: str = Depends(require_page_session)):
     return FileResponse(FRONTEND_DIR / "portfolios.html")
 
 
+@app.get("/goals", include_in_schema=False)
+def goals_page(_: str = Depends(require_page_session)):
+    return FileResponse(FRONTEND_DIR / "goals.html")
+
+
 @app.get("/setup", include_in_schema=False)
 def setup_page(_: str = Depends(require_page_session)):
     return FileResponse(FRONTEND_DIR / "setup.html")
@@ -197,3 +236,14 @@ if __name__ == "__main__":
         port=port,
         reload=os.getenv("SERENITY_DEV") == "1",
     )
+
+@app.middleware("http")
+async def private_conversion_responses(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith((
+        "/serenity-api/conversions", "/serenity-api/reconciliation",
+    )):
+        # Include authentication, validation and conflict responses, not only
+        # successful evidence downloads.
+        response.headers["Cache-Control"] = "no-store"
+    return response

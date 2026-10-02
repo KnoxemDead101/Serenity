@@ -73,6 +73,8 @@ class AccountRead(TimestampReadModel):
     classification: str
     opening_balance: Decimal
     current_balance: Decimal
+    cash_reconciliation_cents: int = 0
+    cash_reconciliation: Decimal = Decimal("0.00")
     institution: str | None
     notes: str | None
     active: bool

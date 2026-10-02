@@ -188,6 +188,12 @@ class InvestmentRead(TimestampReadModel):
     active: bool
     created_at: datetime
     updated_at: datetime
+    read_only: bool = False
+    conversion_history: bool = False
+    conversion_status: str | None = None
+    valuation_representation: str = "legacy"
+    opening_position_id: int | None = None
+    conversion_approval_id: int | None = None
 
 
 class InvestmentUpdate(InvestmentCreate):

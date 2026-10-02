@@ -206,7 +206,7 @@ def test_inactive_zero_and_unknown_basis_and_dated_provenance(client):
     assert rows[first["id"]]["source"]["cost_basis_cents"] == 600000
     assert rows[first["id"]]["valuation"]["as_of"] == "2026-01-31"
     assert rows[first["id"]]["valuation"]["evidence"] == "Archived statement"
-    assert rows[first["id"]]["valuation"]["provenance"] == "original_user_entered_value"
+    assert rows[first["id"]]["valuation"]["provenance"] == "legacy_user_entered"
     assert rows[zero["id"]]["outcome"] == "unresolved"
     assert rows[inactive["id"]]["outcome"] == "inactive"
     assert rows[inactive["id"]]["current_value_cents"] == 0

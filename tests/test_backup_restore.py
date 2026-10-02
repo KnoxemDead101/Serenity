@@ -29,6 +29,11 @@ def test_sqlite_native_roundtrip_and_owner_scoped_reads():
     assert summary["table_rows"]["transactions"] == 6
     assert summary["table_rows"]["transaction_corrections"] == 4
     assert summary["table_rows"]["income_profiles"] == 2
+    assert summary["table_rows"]["reconciliation_approvals"] == 2
+    assert summary["table_rows"]["opening_positions"] == 2
+    assert summary["table_rows"]["valuation_eligibility"] == 2
+    assert summary["table_rows"]["cash_reconciliation_entries"] == 4
+    assert summary["table_rows"]["conversion_events"] == 4
     assert summary["owner_balances"] == {
         "rehearsal-owner-a": "163.00", "rehearsal-owner-b": "163.00",
     }
@@ -36,6 +41,7 @@ def test_sqlite_native_roundtrip_and_owner_scoped_reads():
     assert "owner_isolation" in summary["checks"]
     assert "income_projections" in summary["checks"]
     assert "correction_history" in summary["checks"]
+    assert "conversion_audit_history" in summary["checks"]
     assert "sqlite_integrity_and_foreign_keys" in summary["checks"]
     assert "sqlite://" not in result.stdout
 
@@ -115,10 +121,16 @@ def test_postgres_native_roundtrip_when_required():
     assert summary["revision"] == rehearsal.head_revision()
     assert summary["table_rows"]["accounts"] == 4
     assert summary["table_rows"]["transaction_corrections"] == 4
+    assert summary["table_rows"]["reconciliation_approvals"] == 2
+    assert summary["table_rows"]["opening_positions"] == 2
+    assert summary["table_rows"]["valuation_eligibility"] == 2
+    assert summary["table_rows"]["cash_reconciliation_entries"] == 4
+    assert summary["table_rows"]["conversion_events"] == 4
     assert summary["owner_balances"] == {
         "rehearsal-owner-a": "163.00", "rehearsal-owner-b": "163.00",
     }
     assert "generated_id_sequence" in summary["checks"]
+    assert "conversion_audit_history" in summary["checks"]
 
 
 def test_no_existing_database_location_accepted():

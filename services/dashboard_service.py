@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from schemas.dashboard import DashboardSummary
 from services import account_service, finance_service
+from services.financial_write_lock import lock_owner_financial_writes
 from utils.money import cents_to_dollars
 
 
@@ -39,6 +40,9 @@ def calculate_net_worth_cents(
 
 def get_dashboard_summary(db: Session, owner_id: str) -> DashboardSummary:
     """Combine independent account and finance summaries for the dashboard."""
+    # Cash and selected holdings must be observed on the same side of a
+    # conversion commit, not across separate READ COMMITTED statements.
+    lock_owner_financial_writes(db, owner_id)
     accounts = account_service.list_accounts(db, owner_id)
     account_totals = account_service.get_account_totals(db, owner_id)
     debts = finance_service.list_debts(db, owner_id)
@@ -56,8 +60,8 @@ def get_dashboard_summary(db: Session, owner_id: str) -> DashboardSummary:
         investment_value=finance.investment_value,
         net_worth=cents_to_dollars(
             calculate_net_worth_cents(
-                account_service.total_balance_cents(accounts),
-                finance_service.total_investment_value_cents(investments),
+                account_service.total_balance_cents(accounts, db),
+                finance_service.total_investment_value_cents(investments, db, owner_id),
                 finance_service.total_debt_balance_cents(debts),
             )
         ),

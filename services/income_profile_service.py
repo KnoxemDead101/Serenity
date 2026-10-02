@@ -15,6 +15,7 @@ from schemas.income_profile import (
     IncomeProfileUpdate,
     IncomeSummary,
 )
+from services.financial_write_lock import lock_owner_financial_writes
 from services.ownership import require_owner_id
 from utils.choices import (
     ACCOUNT_CLASSIFICATIONS,
@@ -152,7 +153,9 @@ def _apply(profile: IncomeProfile, data: IncomeProfileCreate) -> None:
 
 
 def create_income_profile(db: Session, data: IncomeProfileCreate, owner_id: str) -> IncomeProfile:
-    profile = IncomeProfile(owner_id=require_owner_id(owner_id), active=True)
+    owner_id = require_owner_id(owner_id)
+    lock_owner_financial_writes(db, owner_id)
+    profile = IncomeProfile(owner_id=owner_id, active=True)
     _apply(profile, data)
     db.add(profile)
     db.commit()
@@ -178,6 +181,7 @@ def get_income_profile(db: Session, profile_id: int, owner_id: str) -> IncomePro
 def update_income_profile(
     db: Session, profile: IncomeProfile, data: IncomeProfileUpdate
 ) -> IncomeProfile:
+    profile = _reload_income_profile_for_write(db, profile)
     _apply(profile, data)
     db.commit()
     db.refresh(profile)
@@ -187,10 +191,27 @@ def update_income_profile(
 def set_income_profile_active(
     db: Session, profile: IncomeProfile, active: bool
 ) -> IncomeProfile:
+    profile = _reload_income_profile_for_write(db, profile)
     profile.active = active
     db.commit()
     db.refresh(profile)
     return profile
+
+
+def _reload_income_profile_for_write(
+    db: Session, profile: IncomeProfile
+) -> IncomeProfile:
+    """Refresh the owner-scoped row after serializing against conversions."""
+    owner_id = require_owner_id(profile.owner_id)
+    lock_owner_financial_writes(db, owner_id)
+    refreshed = db.scalar(
+        select(IncomeProfile)
+        .where(IncomeProfile.id == profile.id, IncomeProfile.owner_id == owner_id)
+        .execution_options(populate_existing=True)
+    )
+    if refreshed is None:
+        raise ValueError("Income profile no longer exists for this owner")
+    return refreshed
 
 
 def get_income_summary(db: Session, owner_id: str) -> IncomeSummary:

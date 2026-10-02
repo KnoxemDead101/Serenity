@@ -20,8 +20,8 @@ still see the SQL it runs by setting echo=True on the engine below.
 
 import os
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 # The database location comes from an environment variable so it can be
 # changed without editing code (see .env.example). The default is a file
@@ -50,6 +50,14 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False)
 
 class Base(DeclarativeBase):
     """Parent class for all database models."""
+
+
+# Enforce safety for direct service calls as well as HTTP requests. Identity
+# bootstrap remains available; owner-scoped domain mutations fail closed.
+from services.write_safety import protect_bulk, protect_flush
+
+event.listen(Session, "before_flush", protect_flush)
+event.listen(Session, "do_orm_execute", protect_bulk)
 
 
 def get_db():

@@ -6,8 +6,9 @@
 - [SQLite UTC timestamps](sqlite-utc-timestamps.md) — SQLite drops timezone metadata on ORM reads; treat its naive persisted timestamps as UTC at API boundaries.
 - [Clerk vanilla JS UI](clerk-vanilla-js-ui.md) — plain HTML must load the matching Clerk UI bundle before mounting prebuilt sign-in components.
 - [Clerk backend request filtering](clerk-backend-requests.md) — Python's default User-Agent can receive a non-JSON 403 despite valid credentials.
-- [Financial record ownership](financial-record-ownership.md) — preserve workspace ownership across provider changes; identity links and legacy backfills require verified provenance.
+- [Financial record ownership](financial-record-ownership.md) — verified provenance preserves workspace isolation; test DB constraints under actual runtime connection settings.
 - [Clerk token trust](clerk-token-trust.md) — session lookup is not token proof; issuer and browser-origin trust must stay independent of caller input.
 - [Backup rehearsal boundary](backup-rehearsal-boundary.md) — disposable recovery proof must never accept live targets; host recovery and key availability need separate validation.
 - [Profit Engine boundaries](profit-engine-boundaries.md) — expand incrementally; reconcile legacy investments before conversion and preserve historical specification meaning.
 - [Reconciliation preview boundary](reconciliation-preview-boundary.md) — disposable signed reports are review evidence, never conversion approval; account completeness needs explicit attestation.
+- [Publish FK prerequisites](publish-fk-prerequisites.md) — check the actual Publish diff for both parent-key presence and ordering; passing Alembic migrations are not enough.

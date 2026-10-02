@@ -1,3 +1,15 @@
+# Serenity Next execution authority
+
+The product owner authorized the complete Serenity Next development arc on
+2026-10-01. See `docs/SERENITY_NEXT.md` for the approved horizon and execution
+contract. It supersedes older Gate-0-only and per-slice authorization stops.
+Proceed through internal milestones without routine re-authorization; report
+at wave boundaries. Destructive changes, unresolved financial/security/trading
+semantics, major architecture deviations, new paid providers, production
+deployment, and live broker execution still require human review. Publication
+of the current project is the owner's immediate priority before arc development.
+These permissions do not override the Python-only stack or financial safeguards.
+
 # Serenity
 
 Serenity is a Python/FastAPI personal finance and investment intelligence app.

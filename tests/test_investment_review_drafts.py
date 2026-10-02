@@ -24,7 +24,7 @@ def test_assigned_draft_does_not_change_totals_and_review_is_explicit(client, db
     assert draft["investment_account_id"] == container["id"]
     assert get_dashboard_summary(db, "test-owner") == before
     exported = client.get(ROOT + "/export").json()
-    assert exported["format_version"] == 5
+    assert exported["format_version"] == 7
     assert exported["investments"][0]["review_pending"] is True
     assert exported["investments"][0]["investment_account_id"] == container["id"]
     unresolved = post_preview(client)["report"]

@@ -13,6 +13,7 @@ from schemas.transaction import (
     TransactionSnapshot, TransactionUpdate,
 )
 from services.ownership import require_owner_id
+from services.financial_write_lock import lock_owner_financial_writes
 from utils.money import cents_to_dollars, dollars_to_cents
 
 
@@ -46,7 +47,7 @@ def _resolve_business(
         return None
     business = db.scalar(select(Business).where(
         Business.id == business_id, Business.owner_id == owner_id
-    ))
+    ).execution_options(populate_existing=True))
     if business is None:
         raise TransactionRuleError("That business doesn't exist.")
     if business.active is None:
@@ -66,7 +67,7 @@ def _resolve_dependent(
         return None
     dependent = db.scalar(select(Dependent).where(
         Dependent.id == dependent_id, Dependent.owner_id == owner_id
-    ))
+    ).execution_options(populate_existing=True))
     if dependent is None:
         raise TransactionRuleError("That dependent doesn't exist.")
     if dependent.active is None:
@@ -105,13 +106,22 @@ def _apply_fields(
 
 
 def create_transaction(db: Session, account: Account, data: TransactionCreate) -> Transaction:
+    owner_id = require_owner_id(account.owner_id)
+    lock_owner_financial_writes(db, owner_id)
+    account = db.scalar(
+        select(Account)
+        .where(Account.id == account.id, Account.owner_id == owner_id)
+        .execution_options(populate_existing=True)
+    )
+    if account is None:
+        raise TransactionRuleError("Account no longer exists for this owner.")
     if account.active is None:
         raise TransactionRuleError("Account has no active lifecycle state.")
     if not account.active:
         raise TransactionRuleError(
             "This account is deactivated. Reactivate it to record new transactions."
         )
-    transaction = Transaction(owner_id=require_owner_id(account.owner_id))
+    transaction = Transaction(owner_id=owner_id)
     _apply_fields(db, transaction, account, data)
     account.transactions.append(transaction)
     db.commit()
@@ -168,6 +178,7 @@ def record_correction(db: Session, transaction: Transaction, action: str, before
 
 
 def update_transaction(db: Session, transaction: Transaction, data: TransactionUpdate) -> Transaction:
+    transaction = _reload_transaction_for_write(db, transaction)
     before = transaction_snapshot(transaction)
     _apply_fields(db, transaction, transaction.account, data, existing=transaction)
     record_correction(db, transaction, "Updated", before)
@@ -177,10 +188,56 @@ def update_transaction(db: Session, transaction: Transaction, data: TransactionU
 
 
 def delete_transaction(db: Session, transaction: Transaction) -> None:
+    transaction = _reload_transaction_for_write(db, transaction)
     before = transaction_snapshot(transaction)
     transaction.deleted_at = utc_now()
     record_correction(db, transaction, "Deleted", before)
     db.commit()
+
+
+def _reload_transaction_for_write(db: Session, transaction: Transaction) -> Transaction:
+    """Acquire the owner lock, then discard stale transaction/account state."""
+    owner_id = require_owner_id(transaction.owner_id)
+    lock_owner_financial_writes(db, owner_id)
+    refreshed = db.scalar(
+        select(Transaction)
+        .where(
+            Transaction.id == transaction.id,
+            Transaction.owner_id == owner_id,
+            Transaction.account_id == transaction.account_id,
+            Transaction.deleted_at.is_(None),
+        )
+        .execution_options(populate_existing=True)
+    )
+    if refreshed is None:
+        raise TransactionRuleError("Transaction no longer exists for this owner.")
+    account = db.scalar(
+        select(Account)
+        .where(Account.id == refreshed.account_id, Account.owner_id == owner_id)
+        .execution_options(populate_existing=True)
+    )
+    if account is None:
+        raise TransactionRuleError("Transaction account no longer exists for this owner.")
+    refreshed.account = account
+    if refreshed.business_id is not None:
+        business = db.scalar(
+            select(Business)
+            .where(Business.id == refreshed.business_id, Business.owner_id == owner_id)
+            .execution_options(populate_existing=True)
+        )
+        if business is None:
+            raise TransactionRuleError("Transaction business no longer exists for this owner.")
+        refreshed.business = business
+    if refreshed.dependent_id is not None:
+        dependent = db.scalar(
+            select(Dependent)
+            .where(Dependent.id == refreshed.dependent_id, Dependent.owner_id == owner_id)
+            .execution_options(populate_existing=True)
+        )
+        if dependent is None:
+            raise TransactionRuleError("Transaction dependent no longer exists for this owner.")
+        refreshed.dependent = dependent
+    return refreshed
 
 
 def list_corrections(

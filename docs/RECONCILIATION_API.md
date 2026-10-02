@@ -1,7 +1,13 @@
 # Read-only reconciliation preview API
 
-All routes require the current workspace session. No persistence, approval,
-execution or financial mutation exists. Cancel by discarding the response.
+All routes described here require the current workspace session. These format 1
+preview, verify and export operations do not persist approvals, execute, or
+mutate finances. Cancel by discarding the response.
+
+The separately authorized conversion implementation is documented in
+[CONVERSION_IMPLEMENTATION.md](CONVERSION_IMPLEMENTATION.md). Its execution
+preview and durable approvals do not reinterpret format 1 tokens or turn this
+read-only API into execution authorization.
 
 `POST /serenity-api/reconciliation/preview`
 

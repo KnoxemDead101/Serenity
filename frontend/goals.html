@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0a0a">
+  <title>Serenity · Goals</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">Serenity</span>
+    <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="site-nav">Menu</button>
+    <nav id="site-nav" class="site-nav" aria-label="Main">
+      <a href="/">Dashboard</a>
+      <a href="/accounts">Accounts</a>
+      <a href="/finances">Finances</a>
+      <a href="/income">Income</a>
+      <a href="/profit-engine">Profit Engine</a>
+      <a href="/portfolios">Portfolios</a>
+      <a href="/goals" class="active" aria-current="page">Goals</a>
+      <a href="/setup">Setup</a>
+      <a href="/sign-out" class="sign-out">Sign out</a>
+    </nav>
+  </header>
+  <main>
+    <h1>Goals</h1>
+    <p class="muted">Goals are manual notes about what you are working toward. Progress is whatever you enter yourself. Nothing here is linked to, or calculated from, your accounts, investments, or transactions.</p>
+
+    <section class="panel" aria-labelledby="goal-title">
+      <h2 id="goal-title">Add a goal</h2>
+      <form id="goal-form" class="wide-form form-grid">
+        <label>Name <input name="name" required maxlength="100" autocomplete="off"></label>
+        <label>Description <span class="muted">(optional)</span>
+          <textarea name="description" maxlength="1000" rows="2"></textarea>
+        </label>
+        <label>Goal type <select name="goal_type" required></select></label>
+        <label>Category <select name="category" required></select></label>
+        <label>Priority <select name="priority" required></select></label>
+        <label>Status <select name="status" disabled></select>
+          <small class="muted" id="goal-status-hint">New goals always start as Not started. After saving, change status with the status control in the goals table.</small>
+        </label>
+        <label>Target date <span class="muted">(optional)</span>
+          <input name="target_date" type="date">
+        </label>
+        <label>Target amount ($) <span class="muted">(optional)</span>
+          <input name="target_amount" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. 5000.00">
+        </label>
+        <label>Current progress ($) <span class="muted">(optional, entered by you)</span>
+          <input name="current_progress_amount" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. 1250.00" aria-describedby="goal-source-hint" disabled>
+        </label>
+        <label>Progress source
+          <select name="progress_source" required></select>
+          <small class="muted" id="goal-source-hint">Only Manual accepts an entered progress amount. Other sources are reserved: the amount input is disabled and no linked or automatic progress is available. To clear an entered amount, select Manual first.</small>
+        </label>
+        <label>Notes <span class="muted">(optional)</span>
+          <textarea name="notes" maxlength="1000" rows="2"></textarea>
+        </label>
+        <div class="form-buttons">
+          <button type="submit" id="goal-submit">Add goal</button>
+          <button type="button" id="goal-cancel" class="secondary" hidden>Cancel edit</button>
+        </div>
+        <p id="goal-message" class="message" role="status" hidden></p>
+      </form>
+    </section>
+
+    <section class="panel" aria-labelledby="goals-list-title">
+      <h2 id="goals-list-title">Your goals</h2>
+      <label><input type="checkbox" id="goals-show-archived"> Show archived goals</label>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Type</th><th>Category</th><th>Priority</th><th>Status</th><th>Target date</th><th class="num">Target</th><th class="num">Progress (manual)</th><th>Source</th><th>Notes</th><th>Actions</th></tr></thead>
+          <tbody id="goals-body"><tr><td colspan="11" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel" id="composition" aria-labelledby="composition-title" tabindex="-1" hidden>
+      <h2 id="composition-title">Goal composition</h2>
+      <p class="muted">Planning notes only. Expected costs and manual actual-cost overrides are provisional figures you type yourself. They are not real spending and are never totaled or linked to your accounts or transactions.</p>
+      <p id="composition-message" class="message" role="status" hidden></p>
+      <div id="composition-body"></div>
+    </section>
+  </main>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/goal-composition.js"></script>
+  <script src="/static/js/goals.js"></script>
+</body>
+</html>

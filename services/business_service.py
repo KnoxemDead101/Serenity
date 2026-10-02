@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from models.business import Business
 from schemas.business import BusinessCreate, BusinessRead, BusinessUpdate
+from services.financial_write_lock import lock_owner_financial_writes
 from services.ownership import require_owner_id
 
 
@@ -27,6 +28,7 @@ def _check_name_free(
 
 def create_business(db: Session, data: BusinessCreate, owner_id: str) -> Business:
     owner_id = require_owner_id(owner_id)
+    lock_owner_financial_writes(db, owner_id)
     _check_name_free(db, data.name, owner_id)
     business = Business(owner_id=owner_id, name=data.name, notes=data.notes)
     db.add(business)
@@ -59,6 +61,7 @@ def get_business(db: Session, business_id: int, owner_id: str) -> Business | Non
 def update_business(
     db: Session, business: Business, data: BusinessUpdate
 ) -> Business:
+    business = _reload_business_for_write(db, business)
     _check_name_free(db, data.name, business.owner_id, ignore_id=business.id)
     business.name, business.notes = data.name, data.notes
     try:
@@ -71,10 +74,25 @@ def update_business(
 
 
 def set_business_active(db: Session, business: Business, active: bool) -> Business:
+    business = _reload_business_for_write(db, business)
     business.active = active
     db.commit()
     db.refresh(business)
     return business
+
+
+def _reload_business_for_write(db: Session, business: Business) -> Business:
+    """Refresh the owner-scoped row after serializing against conversions."""
+    owner_id = require_owner_id(business.owner_id)
+    lock_owner_financial_writes(db, owner_id)
+    refreshed = db.scalar(
+        select(Business)
+        .where(Business.id == business.id, Business.owner_id == owner_id)
+        .execution_options(populate_existing=True)
+    )
+    if refreshed is None:
+        raise ValueError("Business no longer exists for this owner")
+    return refreshed
 
 
 def to_business_read(business: Business) -> BusinessRead:

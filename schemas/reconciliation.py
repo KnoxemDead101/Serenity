@@ -38,6 +38,9 @@ class AccountEvidence(PreviewInput):
     complete: StrictBool = False
     source_ids: list[StrictInt] = Field(default_factory=list, max_length=10000)
     cash_cents: StrictInt | None = None
+    prior_conversion_complete: StrictBool = False
+    prior_opening_position_ids: list[StrictInt] = Field(default_factory=list, max_length=10000)
+    prior_cash_entry_ids: list[StrictInt] = Field(default_factory=list, max_length=10000)
 
 
 class PreviewRequest(PreviewInput):

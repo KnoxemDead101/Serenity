@@ -141,7 +141,15 @@ async function loadAccounts() {
     row.appendChild(makeCell(account.account_type));
     row.appendChild(makeCell(account.classification));
     row.appendChild(makeCell(account.institution || "—"));
-    row.appendChild(makeCell(formatMoney(account.current_balance), "num"));
+    const balanceCell = makeCell(formatMoney(account.current_balance), "num");
+    if (account.cash_reconciliation_cents) {
+      const correction = document.createElement("small");
+      correction.className = "muted";
+      correction.style.display = "block";
+      correction.textContent = `Includes ${formatMoney(account.cash_reconciliation)} audited non-income cash reconciliation`;
+      balanceCell.append(correction);
+    }
+    row.appendChild(balanceCell);
     row.appendChild(makeActionsCell(
       makeRowButton("Edit", "edit", account.id),
       account.active ? makeRowButton("Deactivate", "deactivate", account.id, "secondary")

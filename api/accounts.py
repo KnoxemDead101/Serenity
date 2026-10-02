@@ -44,7 +44,7 @@ def create_account(
     # By the time we get here, FastAPI has already validated `data`
     # using AccountCreate. Invalid input never reaches this line.
     account = account_service.create_account(db, data, user_id)
-    return account_service.to_account_read(account)
+    return account_service.to_account_read(account, db)
 
 
 @router.get("", response_model=list[AccountRead])
@@ -52,7 +52,7 @@ def list_accounts(
     user_id: str = Depends(require_session), db: Session = Depends(get_db)
 ):
     accounts = account_service.list_accounts(db, user_id)
-    return [account_service.to_account_read(account) for account in accounts]
+    return [account_service.to_account_read(account, db) for account in accounts]
 
 
 # This route must be defined BEFORE "/{account_id}". Otherwise FastAPI
@@ -72,7 +72,7 @@ def get_account(
     user_id: str = Depends(require_session),
     db: Session = Depends(get_db),
 ):
-    return account_service.to_account_read(_require_account(db, account_id, user_id))
+    return account_service.to_account_read(_require_account(db, account_id, user_id), db)
 
 
 @router.put("/{account_id}", response_model=AccountRead)
@@ -85,7 +85,7 @@ def update_account(
     account = account_service.update_account(
         db, _require_account(db, account_id, user_id), data
     )
-    return account_service.to_account_read(account)
+    return account_service.to_account_read(account, db)
 
 
 @router.post("/{account_id}/deactivate", response_model=AccountRead)
@@ -97,7 +97,7 @@ def deactivate_account(
     account = account_service.set_account_active(
         db, _require_account(db, account_id, user_id), False
     )
-    return account_service.to_account_read(account)
+    return account_service.to_account_read(account, db)
 
 
 @router.post("/{account_id}/reactivate", response_model=AccountRead)
@@ -109,4 +109,4 @@ def reactivate_account(
     account = account_service.set_account_active(
         db, _require_account(db, account_id, user_id), True
     )
-    return account_service.to_account_read(account)
+    return account_service.to_account_read(account, db)

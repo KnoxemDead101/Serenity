@@ -43,7 +43,15 @@ def _require_investment(db: Session, investment_id: int, owner_id: str) -> Inves
         raise HTTPException(status_code=404, detail="Investment not found")
     return investment
 
-
+def _investment_write(db: Session, operation, *args):
+    try:
+        return operation(db, *args)
+    except finance_service.ConvertedInvestmentReadOnly as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 @router.get("/finance/options")
 def get_finance_options():
     return finance_service.get_finance_options()
@@ -233,14 +241,12 @@ def update_investment(
     user_id: str = Depends(require_session),
     db: Session = Depends(get_db),
 ):
-    try:
-        return finance_service.to_investment_read(
-            finance_service.update_investment(
-                db, _require_investment(db, investment_id, user_id), data
-            )
+    return finance_service.to_investment_read(
+        _investment_write(
+            db, finance_service.update_investment,
+            _require_investment(db, investment_id, user_id), data
         )
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    )
 
 
 @router.delete("/investments/{investment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -249,8 +255,9 @@ def delete_investment(
     user_id: str = Depends(require_session),
     db: Session = Depends(get_db),
 ):
-    finance_service.delete_investment(
-        db, _require_investment(db, investment_id, user_id)
+    _investment_write(
+        db, finance_service.delete_investment,
+        _require_investment(db, investment_id, user_id)
     )
 
 
@@ -261,8 +268,9 @@ def deactivate_investment(
     db: Session = Depends(get_db),
 ):
     return finance_service.to_investment_read(
-        finance_service.set_investment_active(
-            db, _require_investment(db, investment_id, user_id), False
+        _investment_write(
+            db, finance_service.set_investment_active,
+            _require_investment(db, investment_id, user_id), False
         )
     )
 
@@ -274,8 +282,9 @@ def reactivate_investment(
     db: Session = Depends(get_db),
 ):
     return finance_service.to_investment_read(
-        finance_service.set_investment_active(
-            db, _require_investment(db, investment_id, user_id), True
+        _investment_write(
+            db, finance_service.set_investment_active,
+            _require_investment(db, investment_id, user_id), True
         )
     )
 

@@ -8,3 +8,16 @@ When a local SQLite file predates Alembic, do not stamp it as migrated or delete
 **Why:** A former development run created tables directly without Alembic. The later migration workflow failed with “table accounts already exists,” despite no user records being present. Schema shape differed from the migration baseline.
 
 **How to apply:** If migration startup fails on an existing SQLite table, inspect row counts and columns before changing the database. Preserve even empty legacy files under a separate name; never silently discard populated data.
+
+Preserve independently applied feature branches and converge through a merge
+migration, rather than rewriting their parent revisions.
+
+**Why:** Development had already applied conversion before the newer
+Goal/draft branch arrived. Rechaining that applied revision would falsely imply
+its new ancestors had run and leave the database missing their schema.
+
+**How to apply:** Inspect existing revision history before joining branches.
+Keep both histories, install any cross-feature write guards after both parents
+exist, and expect multiple revision rows when downgrading just one branch.
+Feature-only non-invasive-schema tests should target that feature's revision,
+not a moving global head that can legitimately change other tables.

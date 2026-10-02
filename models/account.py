@@ -28,7 +28,7 @@ when displaying. `utc_now()` below is the one place "now" comes from.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Index, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from services.ownership import OWNER_ID_MAX_LENGTH
@@ -44,9 +44,9 @@ class Account(Base):
     __tablename__ = "accounts"
     __table_args__ = (
         Index("ix_accounts_owner_id", "owner_id"),
-        # An additive index lets new containers reference an account together
-        # with its owner, without rebuilding the legacy accounts table.
-        Index("ux_accounts_owner_id_id", "owner_id", "id", unique=True),
+        # A real constraint makes this foreign-key target visible to schema
+        # migration tools, including the development-to-production Publish diff.
+        UniqueConstraint("owner_id", "id", name="uq_accounts_owner_id_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

@@ -135,8 +135,15 @@ def test_postgres_portfolio_constraints_and_safe_downgrade(postgres_url, pg_engi
     refused = _alembic(postgres_url, "downgrade", "0014_instrument_registry", succeeds=False)
     assert "Cannot downgrade 0015" in refused.stderr
     with pg_engine.connect() as connection:
-        # PostgreSQL rolls back the whole failed downgrade transaction.
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0017_portfolio_holdings"
+        # Alembic keeps the complete upgraded head after the failed downgrade.
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0022_publish_key_stage"
+        assert {
+            "reconciliation_approvals",
+            "opening_positions",
+            "valuation_eligibility",
+            "cash_reconciliation_entries",
+            "conversion_events",
+        } <= set(inspect(pg_engine).get_table_names())
         assert connection.scalar(text("SELECT opening_balance_cents FROM accounts WHERE id = :id"),
                                  {"id": cash["id"]}) == 12345
     assert pg_client.post(f"/serenity-api/investment-accounts/{container['id']}/deactivate").status_code == 200
